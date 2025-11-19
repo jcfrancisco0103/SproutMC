@@ -66,7 +66,7 @@ function navigateTo(next){filesHistory.push(el('pathInput').value);loadFiles(nex
 el('backBtn').onclick=()=>{if(!filesHistory.length)return;const prev=filesHistory.pop();loadFiles(prev)}
 const origBrowse=()=>loadFiles(el('pathInput').value)
 el('browseBtn').onclick=()=>{filesHistory.push(el('pathInput').value);origBrowse()}
-const editableExt=['.yml','.yaml','.json','.properties','.txt','.cfg','.ini','.md']
+const editableExt=['.yml','.yaml','.json','.properties','.txt','.cfg','.ini','.md','.config','.confi']
 function isEditable(name){const i=name.lastIndexOf('.');if(i<0)return false;const ext=name.slice(i).toLowerCase();return editableExt.includes(ext)}
 function openEditor(fullPath){el('editorPath').textContent=fullPath;document.body.classList.add('modal-open');el('editor').classList.remove('hidden');apiFetch('/api/fs/read?path='+encodeURIComponent(fullPath)).then(r=>r.json()).then(j=>{el('editorContent').value=j.content})}
 el('editorClose').onclick=()=>{document.body.classList.remove('modal-open');el('editor').classList.add('hidden')}
