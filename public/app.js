@@ -38,7 +38,7 @@ async function loadFiles(p){
   if(!r.ok)return;
   const j=await r.json();
   const t=el('fileTable');
-  t.innerHTML='<tr><th>Sel</th><th>Name</th><th>Type</th><th>Size</th><th>Actions</th></tr>';
+  t.innerHTML='<tr><th><input type="checkbox" id="filesSelectAllCb" /></th><th>Name</th><th>Type</th><th>Size</th><th>Actions</th></tr>';
   selectedFiles.clear()
   const entries=[...j.entries].sort((a,b)=>{
     if(a.isDir!==b.isDir) return a.isDir? -1: 1; // folders first
@@ -46,7 +46,7 @@ async function loadFiles(p){
   })
   entries.forEach(e=>{
     const tr=document.createElement('tr');
-    const tdSel=document.createElement('td');const cb=document.createElement('input');cb.type='checkbox';cb.onchange=()=>{const target=pathJoin(p,e.name);if(cb.checked)selectedFiles.add(target);else selectedFiles.delete(target)};tdSel.appendChild(cb);
+    const tdSel=document.createElement('td');const cb=document.createElement('input');cb.type='checkbox';cb.onchange=()=>{const target=pathJoin(p,e.name);if(cb.checked)selectedFiles.add(target);else selectedFiles.delete(target);updateFilesSelectAllState()};tdSel.appendChild(cb);
     const a=document.createElement('a');a.href='#';a.textContent=e.name;a.className=e.isDir?'link-dir':'link-file';a.onclick=()=>{if(e.isDir)navigateTo(pathJoin(p,e.name))};
     const tdN=document.createElement('td');tdN.appendChild(a);
     const tdT=document.createElement('td');tdT.textContent=e.isDir?'Folder':'File';tdT.className=e.isDir?'type-dir':'type-file';
@@ -59,13 +59,18 @@ async function loadFiles(p){
     tr.appendChild(tdSel);tr.appendChild(tdN);tr.appendChild(tdT);tr.appendChild(tdS);tr.appendChild(tdA);
     t.appendChild(tr)
   })
+  const filesSelAll=el('filesSelectAllCb');
+  if(filesSelAll){filesSelAll.onchange=()=>{const rows=[...t.querySelectorAll('tr')].slice(1);rows.forEach(tr=>{const cb=tr.querySelector('input[type="checkbox"]');const a=tr.querySelector('td:nth-child(2) a');const name=a?a.textContent.trim():'';if(cb&&name){cb.checked=filesSelAll.checked;const target=pathJoin(p,name);if(filesSelAll.checked)selectedFiles.add(target);else selectedFiles.delete(target)}});updateFilesSelectAllState()};updateFilesSelectAllState()}
 }
+
+function updateFilesSelectAllState(){const t=el('fileTable');const selAll=el('filesSelectAllCb');if(!t||!selAll)return;const rows=[...t.querySelectorAll('tr')].slice(1);const cbs=rows.map(tr=>tr.querySelector('input[type="checkbox"]')).filter(Boolean);const total=cbs.length;const checked=cbs.filter(cb=>cb.checked).length;selAll.indeterminate=checked>0&&checked<total;selAll.checked=total>0&&checked===total}
 function pathJoin(a,b){if(a==='.')return b;return a.replace(/\\$/,'')+'/'+b}
 const filesHistory=[]
 function navigateTo(next){filesHistory.push(el('pathInput').value);loadFiles(next)}
 el('backBtn').onclick=()=>{if(!filesHistory.length)return;const prev=filesHistory.pop();loadFiles(prev)}
 const origBrowse=()=>loadFiles(el('pathInput').value)
 el('browseBtn').onclick=()=>{filesHistory.push(el('pathInput').value);origBrowse()}
+el('selectAllFiles').onclick=()=>{const t=el('fileTable');const p=el('pathInput').value;const rows=[...t.querySelectorAll('tr')].slice(1);rows.forEach(tr=>{const cb=tr.querySelector('input[type="checkbox"]');const a=tr.querySelector('td:nth-child(2) a');const name=a?a.textContent.trim():'';if(cb&&name){cb.checked=true;selectedFiles.add(pathJoin(p,name))}})}
 const editableExt=['.yml','.yaml','.json','.properties','.txt','.cfg','.ini','.md','.config','.confi','.conf']
 function isEditable(name){const i=name.lastIndexOf('.');if(i<0)return false;const ext=name.slice(i).toLowerCase();return editableExt.includes(ext)}
 function openEditor(fullPath){el('editorPath').textContent=fullPath;document.body.classList.add('modal-open');el('editor').classList.remove('hidden');apiFetch('/api/fs/read?path='+encodeURIComponent(fullPath)).then(r=>r.json()).then(j=>{el('editorContent').value=j.content})}
@@ -79,11 +84,11 @@ async function loadPlugins(){
   const r=await apiFetch('/api/plugins');
   const j=await r.json();
   const t=el('pluginTable');
-  t.innerHTML='<tr><th>Sel</th><th>Name</th><th>Actions</th></tr>';
+  t.innerHTML='<tr><th><input type="checkbox" id="pluginsSelectAllCb" /></th><th>Name</th><th>Actions</th></tr>';
   selectedPlugins.clear()
   j.plugins.forEach(p=>{
     const tr=document.createElement('tr');
-    const tdSel=document.createElement('td');const cb=document.createElement('input');cb.type='checkbox';cb.onchange=()=>{if(cb.checked)selectedPlugins.add(p.name);else selectedPlugins.delete(p.name)};tdSel.appendChild(cb);
+    const tdSel=document.createElement('td');const cb=document.createElement('input');cb.type='checkbox';cb.onchange=()=>{if(cb.checked)selectedPlugins.add(p.name);else selectedPlugins.delete(p.name);updatePluginsSelectAllState()};tdSel.appendChild(cb);
     const tdN=document.createElement('td');tdN.textContent=p.name;
     const tdA=document.createElement('td');
     const rn=document.createElement('button');rn.textContent='Rename';rn.onclick=async()=>{const newName=prompt('New name',p.name);if(!newName||newName===p.name)return;await apiFetch('/api/fs/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:'plugins/'+p.name,to:'plugins/'+newName})});loadPlugins()};tdA.appendChild(rn);
@@ -91,8 +96,12 @@ async function loadPlugins(){
     tr.appendChild(tdSel);tr.appendChild(tdN);tr.appendChild(tdA);
     t.appendChild(tr)
   })
+  const pluginsSelAll=el('pluginsSelectAllCb');
+  if(pluginsSelAll){pluginsSelAll.onchange=()=>{const rows=[...t.querySelectorAll('tr')].slice(1);rows.forEach(tr=>{const cb=tr.querySelector('input[type=\"checkbox\"]');const name=tr.querySelector('td:nth-child(2)')?.textContent.trim();if(cb&&name){cb.checked=pluginsSelAll.checked;if(pluginsSelAll.checked)selectedPlugins.add(name);else selectedPlugins.delete(name)}});updatePluginsSelectAllState()};updatePluginsSelectAllState()}
 }
 const selectedPlugins=new Set()
+function updatePluginsSelectAllState(){const t=el('pluginTable');const selAll=el('pluginsSelectAllCb');if(!t||!selAll)return;const rows=[...t.querySelectorAll('tr')].slice(1);const cbs=rows.map(tr=>tr.querySelector('input[type="checkbox"]')).filter(Boolean);const total=cbs.length;const checked=cbs.filter(cb=>cb.checked).length;selAll.indeterminate=checked>0&&checked<total;selAll.checked=total>0&&checked===total}
+el('pluginSelectAll').onclick=()=>{const t=el('pluginTable');const rows=[...t.querySelectorAll('tr')].slice(1);rows.forEach(tr=>{const cb=tr.querySelector('input[type="checkbox"]');const name=tr.querySelector('td:nth-child(2)')?.textContent.trim();if(cb&&name){cb.checked=true;selectedPlugins.add(name)}})}
 el('pluginDeleteSelected').onclick=async()=>{if(selectedPlugins.size===0)return;const ok=confirm(`Are you sure you want to delete ${selectedPlugins.size} plugin(s)?`);if(!ok)return;for(const name of selectedPlugins){await apiFetch('/api/plugins/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})})}selectedPlugins.clear();loadPlugins()}
 el('pluginUpload').onclick=async()=>{const files=el('pluginFile').files;if(!files||files.length===0)return;const fd=new FormData();for(const f of files){fd.append('files',f)}const box=el('pluginUploadProgress');const bar=el('pluginUploadBar');const txt=el('pluginUploadText');box.classList.remove('hidden');bar.style.setProperty('--w','0%');txt.textContent='0%';el('pluginUpload').disabled=true;el('pluginFile').disabled=true;try{const r=await apiUpload('/api/plugins/upload-multi',fd,(pct)=>{bar.style.setProperty('--w',pct+'%');txt.textContent=pct+'%'});el('pluginFile').value='';loadPlugins()}catch(e){}finally{el('pluginUpload').disabled=false;el('pluginFile').disabled=false;bar.style.setProperty('--w','0%');txt.textContent='';box.classList.add('hidden')}}
 async function loadBackups(){const r=await apiFetch('/api/backups');const j=await r.json();const t=el('backupTable');t.innerHTML='<tr><th>Name</th><th>Size</th><th>Actions</th></tr>';j.backups.forEach(b=>{const tr=document.createElement('tr');const tdN=document.createElement('td');tdN.textContent=b.name;const tdS=document.createElement('td');tdS.textContent=b.size;const tdA=document.createElement('td');const dl=document.createElement('button');dl.textContent='Download';dl.onclick=()=>window.location='/api/backup/download?name='+encodeURIComponent(b.name);tdA.appendChild(dl);const rs=document.createElement('button');rs.textContent='Restore';rs.onclick=async()=>{await apiFetch('/api/backup/restore',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:b.name})});alert('Restored')};tdA.appendChild(rs);const del=document.createElement('button');del.textContent='Delete';del.onclick=async()=>{const ok=confirm('Are you sure you want to delete this backup?');if(!ok)return;await apiFetch('/api/backup/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:b.name})});loadBackups()};tdA.appendChild(del);tr.appendChild(tdN);tr.appendChild(tdS);tr.appendChild(tdA);t.appendChild(tr)})}
