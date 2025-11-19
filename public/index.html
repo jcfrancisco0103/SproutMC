@@ -1,0 +1,164 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SproutMC Wrapper</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div class="brand">
+        <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4bd66a" d="M12 3c-3 4-7 5-8 9 0 5 4 9 8 9s8-4 8-9c-3-2-6-4-8-9z"/></svg>
+        <span>SproutMC Wrapper</span>
+      </div>
+      <div class="header-actions">
+        <div id="statusBar" class="status-pill"></div>
+        <button id="themeToggle" title="Toggle theme">Theme</button>
+        <button id="logoutBtn">Logout</button>
+      </div>
+    </header>
+    <nav class="tabs">
+      <button data-tab="dashboard" class="active">Dashboard</button>
+      <button data-tab="console">Console</button>
+      <button data-tab="files">Files</button>
+      <button data-tab="plugins">Plugins</button>
+      <button data-tab="backups">Backups</button>
+      <button data-tab="tasks">Tasks</button>
+      <button data-tab="worlds">Worlds</button>
+      <button data-tab="settings">Settings</button>
+      <button data-tab="metrics">Metrics</button>
+    </nav>
+    <main class="container">
+      <section id="dashboard" class="tab active">
+        <div class="grid">
+          <div class="card">
+            <h3>Status</h3>
+            <div id="statusText"></div>
+            <button id="startBtn">Start</button>
+            <button id="stopBtn">Stop</button>
+            <button id="restartBtn">Restart</button>
+            <button id="killBtn">Kill</button>
+          </div>
+          <div class="card">
+            <h3>Metrics</h3>
+            <div>CPU: <span id="cpu"></span>%</div>
+            <div>RAM: <span id="ram"></span></div>
+            <div>Disk: <span id="disk"></span></div>
+            <div>TPS: <span id="tps"></span></div>
+            <div>Players: <span id="players"></span></div>
+          </div>
+          <div class="card" id="logsCard">
+            <h3>Logs</h3>
+            <pre id="logsPreview"></pre>
+          </div>
+        </div>
+      </section>
+      <section id="console" class="tab hidden">
+        <div class="card">
+          <div class="row">
+            <button id="consoleStart">Start</button>
+            <button id="consoleStop">Stop</button>
+            <button id="consoleRestart">Restart</button>
+            <button id="consoleKill">Kill</button>
+            <div style="flex:1"></div>
+            <button id="consoleJumpLast">Jump to last line</button>
+          </div>
+          <div class="console" id="consoleOut"></div>
+          <div class="row">
+            <input id="consoleIn" placeholder="Enter command" />
+            <button id="sendCmd">Send</button>
+            <button id="downloadLog">Download Log</button>
+          </div>
+        </div>
+      </section>
+      <section id="files" class="tab hidden">
+        <div class="row">
+          <input id="pathInput" value="." />
+          <button id="browseBtn">Browse</button>
+          <button id="backBtn">Back</button>
+          <input type="file" id="uploadFile" multiple />
+          <button id="uploadBtn">Upload</button>
+          <button id="deleteSelected">Delete Selected</button>
+        </div>
+        <table id="fileTable"></table>
+        <div id="editor" class="modal-overlay hidden">
+          <div class="modal">
+            <div class="row">
+              <div id="editorPath"></div>
+              <div style="flex:1"></div>
+              <button id="editorClose">Close</button>
+              <button id="editorSave">Save</button>
+            </div>
+            <textarea id="editorContent" spellcheck="false"></textarea>
+          </div>
+        </div>
+      </section>
+      <section id="plugins" class="tab hidden">
+        <div class="row">
+          <input type="file" id="pluginFile" multiple />
+          <button id="pluginUpload">Upload</button>
+          <button id="pluginDeleteSelected">Delete Selected</button>
+        </div>
+        <table id="pluginTable"></table>
+      </section>
+      <section id="backups" class="tab hidden">
+        <div class="row">
+          <button id="backupCreate">Create Backup</button>
+        </div>
+        <table id="backupTable"></table>
+      </section>
+      <section id="tasks" class="tab hidden">
+        <div class="row">
+          <input id="taskCron" placeholder="Cron" />
+          <select id="taskType">
+            <option value="restart">Restart</option>
+            <option value="backup">Backup</option>
+            <option value="command">Command</option>
+            <option value="announce">Announce</option>
+          </select>
+          <input id="taskArg" placeholder="Arg" />
+          <label><input type="checkbox" id="taskEnabled" checked /> Enabled</label>
+          <button id="taskCreate">Create</button>
+        </div>
+        <table id="taskTable"></table>
+      </section>
+      <section id="worlds" class="tab hidden">
+        <div class="row">
+          <button id="saveAll">Save All</button>
+        </div>
+        <table id="worldTable"></table>
+      </section>
+      <section id="settings" class="tab hidden">
+        <div class="grid settings-grid">
+          <div class="card">
+            <h3>Wrapper Config</h3>
+            <div class="form-grid">
+              <div class="form-row"><label class="form-label">Instance Root</label><input id="cfgInstanceRoot" class="form-input" /></div>
+              <div class="form-row"><label class="form-label">Java Path</label><input id="cfgJavaPath" class="form-input" /></div>
+              <div class="form-row"><label class="form-label">Server Jar</label><input id="cfgServerJar" class="form-input" /></div>
+            <div class="form-row"><label class="form-label">JVM Args</label><textarea id="cfgJvmArgs" rows="6" class="form-input"></textarea></div>
+              <div class="form-row"><label class="form-label">Auto Restart</label><label class="switch"><input type="checkbox" id="cfgAutoRestart"><span class="slider"></span></label></div>
+              <div class="form-row"><label class="form-label">Max Backoff (s)</label><input id="cfgMaxBackoff" type="number" min="1" class="form-input" /></div>
+            </div>
+            <div class="row">
+              <button id="cfgSave">Save Config</button>
+              <span id="cfgNote">Wrapper restart required to apply config.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section id="metrics" class="tab hidden">
+        <div class="grid">
+          <div class="card"><canvas id="cpuChart"></canvas></div>
+          <div class="card"><canvas id="ramChart"></canvas></div>
+          <div class="card"><canvas id="diskChart"></canvas></div>
+          <div class="card"><canvas id="tpsChart"></canvas></div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

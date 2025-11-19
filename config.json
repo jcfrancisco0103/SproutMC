@@ -1,0 +1,16 @@
+{
+  "instanceRoot": "instances/default",
+  "javaPath": "java",
+  "serverJar": "instances/default/server.jar",
+  "jvmArgs": [
+    "-Xms1G",
+    "-Xmx24G"
+  ],
+  "autoRestart": false,
+  "autoRestartMaxBackoffSeconds": 300,
+  "auth": {
+    "username": "admin",
+    "passwordHash": "$2a$10$GEZNyw5/JZp7TEuoK6osNesi7TuoG7yQh3fYVs3bfqsWQWDyU7lqW",
+    "jwtSecret": "change-this-secret"
+  }
+}
