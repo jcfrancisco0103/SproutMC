@@ -121,8 +121,14 @@ function startServer() {
   if (mcProcess || status.starting) return
   status.starting = true
   status.crashed = false
-  const args = [...cfg.jvmArgs, '-jar', path.resolve(cfg.serverJar), 'nogui']
-  mcProcess = child_process.spawn(cfg.javaPath, args, { cwd: path.resolve(cfg.instanceRoot) })
+  function sanitizeJvmArgs(list){
+    return (list||[]).filter(a => typeof a === 'string' && a.trim().startsWith('-')).map(a=>a.trim())
+  }
+  let exec = String(cfg.javaPath||'java').trim()
+  let extra = []
+  if (/\s-/.test(exec)) { const parts = exec.split(/\s+/); exec = parts.shift(); extra = parts }
+  const args = [...extra, ...sanitizeJvmArgs(cfg.jvmArgs||[]), '-jar', path.resolve(cfg.serverJar), 'nogui']
+  mcProcess = child_process.spawn(exec, args, { cwd: path.resolve(cfg.instanceRoot) })
   backoffSeconds = 1
   rotateLogIfNeeded()
   appendConsole('[WRAPPER] Starting server')
