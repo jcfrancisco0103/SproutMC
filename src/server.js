@@ -321,7 +321,7 @@ app.get('/api/fs/download', requireAuth, (req, res) => {
   } catch { res.status(400).json({ error: 'bad_path' }) }
 })
 
-const editableExt = new Set(['.yml','.yaml','.json','.properties','.txt','.cfg','.ini','.md','.config','.confi'])
+const editableExt = new Set(['.yml','.yaml','.json','.properties','.txt','.cfg','.ini','.md','.config','.confi','.conf'])
 app.get('/api/fs/read', requireAuth, (req, res) => {
   try {
     const p = safeResolve(req.query.path)
