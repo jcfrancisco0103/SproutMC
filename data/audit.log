@@ -94,3 +94,8 @@
 {"ts":1763537291127,"actor":"admin","action":"start","details":{}}
 {"ts":1763537495151,"actor":"admin","action":"start","details":{}}
 {"ts":1763537584281,"actor":"admin","action":"stop","details":{}}
+{"ts":1763558546275,"actor":"admin","action":"plugin_upload","details":{"target":"C:\\Users\\MersYeon\\Documents\\GitHub\\SproutMC\\instances\\default\\plugins\\InteractiveChatDiscordSrvAddon-4.3.4.0.jar"}}
+{"ts":1763558546279,"actor":"admin","action":"plugin_upload","details":{"target":"C:\\Users\\MersYeon\\Documents\\GitHub\\SproutMC\\instances\\default\\plugins\\InteractiveChat-4.3.4.0.jar"}}
+{"ts":1763558658352,"actor":"admin","action":"console","details":{"command":"hiioiii"}}
+{"ts":1763558861400,"actor":"admin","action":"plugin_upload","details":{"target":"C:\\Users\\MersYeon\\Documents\\GitHub\\SproutMC\\instances\\default\\plugins\\InteractiveChatDiscordSrvAddon-4.3.4.0.jar"}}
+{"ts":1763558861404,"actor":"admin","action":"plugin_upload","details":{"target":"C:\\Users\\MersYeon\\Documents\\GitHub\\SproutMC\\instances\\default\\plugins\\InteractiveChat-4.3.4.0.jar"}}

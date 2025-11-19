@@ -28,6 +28,7 @@ fse.ensureDirSync(dataDir)
 fse.ensureDirSync(logsDir)
 fse.ensureDirSync(backupsDir)
 fse.ensureDirSync(path.resolve(cfg.instanceRoot))
+fse.ensureDirSync(path.join(dataDir, 'uploads'))
 
 let mcProcess = null
 let status = { online: false, crashed: false, starting: false, stopping: false }

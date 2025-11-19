@@ -89,3 +89,9 @@ textarea.form-input{min-height:220px}
 #console .row{align-items:stretch}
 #consoleIn{flex:1;min-width:0;padding:12px 14px;height:48px;font-size:15px}
 #sendCmd,#downloadLog{height:48px}
+.
+.progress{display:flex;align-items:center;gap:8px;min-width:220px}
+.progress.hidden{display:none}
+.progress-bar{position:relative;height:10px;flex:1;background:#0c100d;border:1px solid var(--sprout-border);border-radius:999px;overflow:hidden}
+.progress-bar::after{content:"";position:absolute;left:0;top:0;bottom:0;width:var(--w,0%);background:var(--sprout-gradient)}
+.progress-text{min-width:52px;text-align:right;color:var(--sprout-muted);font-size:12px}
