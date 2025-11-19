@@ -122,7 +122,15 @@ function startServer() {
   status.starting = true
   status.crashed = false
   function sanitizeJvmArgs(list){
-    return (list||[]).filter(a => typeof a === 'string' && a.trim().startsWith('-')).map(a=>a.trim())
+    const out = []
+    for (const a of (list||[])){
+      if (typeof a !== 'string') continue
+      const s = a.trim()
+      if (!s.startsWith('-')) continue
+      const parts = s.split(/(?=-[A-Za-z])/).map(x=>x.trim()).filter(Boolean)
+      for (const p of parts) out.push(p)
+    }
+    return out
   }
   let exec = String(cfg.javaPath||'java').trim()
   let extra = []
