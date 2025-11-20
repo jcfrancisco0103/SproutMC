@@ -39,6 +39,7 @@ let lastLogDate = null
 let currentLogStream = null
 let metricsCache = { cpu: null, memory: null, diskUsedBytes: null, tps: null, players: { count: 0, list: [] } }
 const playersOnline = new Set()
+let restartPending = false
 
 function rotateLogIfNeeded() {
   const d = new Date().toISOString().slice(0, 10)
@@ -158,7 +159,8 @@ function startServer() {
     status = { online: false, crashed, starting: false, stopping: false }
     appendConsole(`[WRAPPER] Server exited code=${code} signal=${signal}`)
     broadcast('status', status)
-    if (crashed && cfg.autoRestart) scheduleAutoRestart()
+    if (restartPending) { restartPending = false; startServer() }
+    else if (crashed && cfg.autoRestart) scheduleAutoRestart()
   })
 }
 
@@ -178,10 +180,9 @@ function killServer() {
 
 function restartServer() {
   if (!mcProcess) { startServer(); return }
+  restartPending = true
   appendConsole('[WRAPPER] Saving worlds before restart')
   try { sendCommand('save-all') } catch {}
-  const onExit = () => { startServer(); app.off('server_exited', onExit) }
-  app.on('server_exited', onExit)
   setTimeout(() => { stopServer() }, 1500)
 }
 
