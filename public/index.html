@@ -29,6 +29,7 @@
       <button data-tab="worlds">Worlds</button>
       <button data-tab="settings">Settings</button>
       <button data-tab="metrics">Metrics</button>
+      <button data-tab="terminal">Terminal</button>
     </nav>
     <main class="container">
       <section id="dashboard" class="tab active">
@@ -159,6 +160,15 @@
           <div class="card"><canvas id="ramChart"></canvas></div>
           <div class="card"><canvas id="diskChart"></canvas></div>
           <div class="card"><canvas id="tpsChart"></canvas></div>
+        </div>
+      </section>
+      <section id="terminal" class="tab hidden">
+        <div class="card">
+          <div class="row">
+            <input id="termCmd" class="form-input" placeholder="Enter command" />
+            <button id="termRun">Run</button>
+          </div>
+          <pre id="termOut"></pre>
         </div>
       </section>
     </main>

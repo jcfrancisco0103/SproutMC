@@ -147,3 +147,17 @@ document.addEventListener('DOMContentLoaded',initCharts)
 function updateMetrics(m){el('cpu').textContent=(m.cpu||0).toFixed(1);el('ram').textContent=formatBytes(m.memory||0);el('disk').textContent=formatBytes(m.diskUsedBytes||0);el('tps').textContent=m.tps==null?'N/A':m.tps;el('players').textContent=(m.players&&m.players.count)||0;pushData('cpu',m.cpu||0);const ramPct=m.systemMemoryTotal?Math.min(100,(m.memory||0)/m.systemMemoryTotal*100):0;pushData('ram',ramPct);pushData('disk',m.diskUsedBytes||0);pushData('tps',m.tps==null?0:m.tps);drawCharts()}
 const selectedFiles=new Set()
 el('deleteSelected').onclick=async()=>{if(selectedFiles.size===0)return;const ok=confirm(`Are you sure you want to delete ${selectedFiles.size} item(s)?`);if(!ok)return;let affect=false;for(const target of selectedFiles){if(target.startsWith('plugins/'))affect=true;await apiFetch('/api/fs/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:target})})}selectedFiles.clear();const p=el('pathInput').value;loadFiles(p);if(affect||p==='plugins'||p.startsWith('plugins/'))loadPlugins()}
+if(el('termRun')){
+  el('termRun').onclick=async()=>{
+    const cmd=el('termCmd').value
+    if(!cmd)return
+    el('termRun').disabled=true
+    el('termOut').textContent=''
+    try{
+      const r=await apiFetch('/api/terminal/exec',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cmd})})
+      const j=await r.json()
+      el('termOut').textContent=(j.stdout||'')+(j.stderr||'')+`\n[exit ${j.exitCode}]`
+    }catch{}
+    finally{el('termRun').disabled=false}
+  }
+}

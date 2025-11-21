@@ -527,6 +527,28 @@ app.get('/api/worlds', requireAuth, (req, res) => {
   } catch { res.status(400).json({ error: 'bad_path' }) }
 })
 
+app.post('/api/terminal/exec', requireAuth, (req, res) => {
+  try {
+    const cmd = String((req.body||{}).cmd||'').trim()
+    if (!cmd) return res.status(400).json({ error: 'no_command' })
+    let proc
+    if (process.platform === 'win32') {
+      proc = child_process.spawn('powershell', ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command', cmd], { cwd: process.cwd() })
+    } else {
+      const sh = '/bin/bash'
+      proc = child_process.spawn(sh, ['-lc', cmd], { cwd: process.cwd() })
+    }
+    let stdout = ''
+    let stderr = ''
+    let finished = false
+    const timer = setTimeout(() => { try { proc.kill('SIGINT') } catch {} }, 5*60*1000)
+    proc.stdout.on('data', d => { stdout += d.toString() })
+    proc.stderr.on('data', d => { stderr += d.toString() })
+    proc.on('error', e => { if (finished) return; finished = true; clearTimeout(timer); res.status(500).json({ error: 'exec_failed', message: String(e) }) })
+    proc.on('close', code => { if (finished) return; finished = true; clearTimeout(timer); audit(req.user.username, 'terminal_exec', { cmd, code }); res.json({ exitCode: code, stdout, stderr }) })
+  } catch { res.status(500).json({ error: 'exec_failed' }) }
+})
+
 app.post('/api/worlds/download', requireAuth, (req, res) => {
   try {
     const w = req.body.world
