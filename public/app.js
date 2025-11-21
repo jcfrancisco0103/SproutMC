@@ -24,11 +24,9 @@ el('downloadLog').onclick=()=>{window.location='/api/logs/latest'}
 el('consoleJumpLast').onclick=()=>{const c=el('consoleOut');if(c)c.scrollTop=c.scrollHeight}
 el('consoleStart').onclick=()=>apiFetch('/api/start',{method:'POST'})
 el('consoleStop').onclick=()=>apiFetch('/api/stop',{method:'POST'})
-el('consoleRestart').onclick=()=>apiFetch('/api/restart',{method:'POST'})
 el('consoleKill').onclick=()=>apiFetch('/api/kill',{method:'POST'})
 el('startBtn').onclick=()=>apiFetch('/api/start',{method:'POST'})
 el('stopBtn').onclick=()=>apiFetch('/api/stop',{method:'POST'})
-el('restartBtn').onclick=()=>apiFetch('/api/restart',{method:'POST'})
 el('killBtn').onclick=()=>apiFetch('/api/kill',{method:'POST'})
 async function loadConsoleTail(){const r=await apiFetch('/api/console/tail');const j=await r.json();j.lines.forEach(appendConsole)}
 async function loadConsoleHistory(){const r=await apiFetch('/api/console/history?lines=500');if(r.ok){const j=await r.json();el('consoleOut').innerHTML='';el('logsPreview').innerHTML='';j.lines.forEach(appendConsole);const c=el('consoleOut');c.scrollTop=c.scrollHeight} else {await loadConsoleTail()}}
