@@ -1,13 +1,13 @@
 let token=null
 let ws=null
 function el(id){return document.getElementById(id)}
-function showTab(t){document.querySelectorAll('.tab').forEach(x=>{x.classList.remove('active');x.classList.add('hidden')});document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));const editor=el('editor');if(editor){editor.classList.add('hidden');document.body.classList.remove('modal-open')}const s=el(t);s.classList.remove('hidden');requestAnimationFrame(()=>{s.classList.add('active');if(t==='console'){const c=el('consoleOut');if(c)c.scrollTop=c.scrollHeight}})}
-document.addEventListener('DOMContentLoaded',()=>{token=localStorage.getItem('token');if(!token){location.href='/login.html';return}connectWS();loadStatus();loadConsoleHistory();loadFiles('.');loadPlugins();loadBackups();loadTasks();loadWorlds();showTab('dashboard')})
+function showTab(t){document.querySelectorAll('.tab').forEach(x=>{x.classList.remove('active');x.classList.add('hidden')});document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));const editor=el('editor');if(editor){editor.classList.add('hidden');document.body.classList.remove('modal-open')}const s=el(t);s.classList.remove('hidden');localStorage.setItem('activeTab',t);requestAnimationFrame(()=>{s.classList.add('active');if(t==='console'){const c=el('consoleOut');if(c)c.scrollTop=c.scrollHeight}})}
+document.addEventListener('DOMContentLoaded',()=>{connectWS();loadStatus();loadConsoleHistory();loadFiles('.');loadPlugins();loadBackups();loadTasks();loadWorlds();const t=localStorage.getItem('activeTab')||'dashboard';showTab(t)})
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab))
-el('logoutBtn').onclick=()=>{localStorage.removeItem('token');location.href='/login.html'}
+if(el('logoutBtn')){el('logoutBtn').onclick=()=>{}}
 el('themeToggle').onclick=()=>{const cur=document.body.getAttribute('data-theme')||'dark';const next=cur==='light'?'dark':'light';document.body.setAttribute('data-theme',next);localStorage.setItem('theme',next)}
 document.addEventListener('DOMContentLoaded',()=>{const t=localStorage.getItem('theme')||'dark';document.body.setAttribute('data-theme',t)})
-function auth(){return{Authorization:`Bearer ${token}`}}
+function auth(){return{}}
 function apiFetch(url,opt){const o=opt||{};o.headers={...(o.headers||{}),...auth()};return fetch(url,o).then(r=>{if(r.status===401){localStorage.removeItem('token');location.href='/login.html'};return r})}
 function apiUpload(url,fd,onp){return new Promise((resolve,reject)=>{const x=new XMLHttpRequest();x.open('POST',url);const h=auth();Object.keys(h).forEach(k=>x.setRequestHeader(k,h[k]));x.upload.onprogress=e=>{if(e.lengthComputable&&onp)onp(Math.round(e.loaded*100/e.total))};x.onload=()=>resolve({ok:x.status>=200&&x.status<300,status:x.status,body:x.responseText});x.onerror=()=>reject(new TypeError('network_error'));x.send(fd)})}
 function connectWS(){ws=new WebSocket(`ws://${location.host}`);ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='console'){appendConsole(m.payload.line)}if(m.type==='status'){updateStatus(m.payload)}if(m.type==='metrics'){updateMetrics(m.payload)}if(m.type==='terminal'){appendTerminalLine(m.payload.line)}}}
