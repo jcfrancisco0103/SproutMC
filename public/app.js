@@ -1,9 +1,10 @@
 let token=null
 let ws=null
 function el(id){return document.getElementById(id)}
-function showTab(t){document.querySelectorAll('.tab').forEach(x=>{x.classList.remove('active');x.classList.add('hidden')});document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));const editor=el('editor');if(editor){editor.classList.add('hidden');document.body.classList.remove('modal-open')}const s=el(t);s.classList.remove('hidden');localStorage.setItem('activeTab',t);requestAnimationFrame(()=>{s.classList.add('active');if(t==='console'){const c=el('consoleOut');if(c)c.scrollTop=c.scrollHeight}})}
-document.addEventListener('DOMContentLoaded',()=>{connectWS();loadStatus();loadConsoleHistory();loadFiles('.');loadPlugins();loadBackups();loadTasks();loadWorlds();const t=localStorage.getItem('activeTab')||'dashboard';showTab(t)})
+function showTab(t){document.querySelectorAll('.tab').forEach(x=>{x.classList.remove('active');x.classList.add('hidden')});document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));const editor=el('editor');if(editor){editor.classList.add('hidden');document.body.classList.remove('modal-open')}const s=el(t);s.classList.remove('hidden');location.hash='#'+t;requestAnimationFrame(()=>{s.classList.add('active');if(t==='console'){const c=el('consoleOut');if(c)c.scrollTop=c.scrollHeight}if(t==='console'){loadConsoleHistory()}if(t==='files'){const p=el('pathInput')?el('pathInput').value:'.';loadFiles(p||'.')}if(t==='plugins'){loadPlugins()}if(t==='backups'){loadBackups()}if(t==='tasks'){loadTasks()}if(t==='worlds'){loadWorlds()}if(t==='settings'){loadConfig()}})}
+document.addEventListener('DOMContentLoaded',()=>{connectWS();loadStatus();const t=(location.hash||'').replace('#','')||'dashboard';showTab(t)})
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab))
+window.addEventListener('hashchange',()=>{const t=(location.hash||'').replace('#','')||'dashboard';showTab(t)})
 if(el('logoutBtn')){el('logoutBtn').onclick=()=>{}}
 el('themeToggle').onclick=()=>{const cur=document.body.getAttribute('data-theme')||'dark';const next=cur==='light'?'dark':'light';document.body.setAttribute('data-theme',next);localStorage.setItem('theme',next)}
 document.addEventListener('DOMContentLoaded',()=>{const t=localStorage.getItem('theme')||'dark';document.body.setAttribute('data-theme',t)})
