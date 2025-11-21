@@ -21,7 +21,6 @@ pre{height:200px;overflow:auto;background:#0c100d;border:1px solid var(--sprout-
 /* Wider logs on dashboard */
 #logsCard{grid-column:1/-1}
 #logsPreview{height:340px}
-.
 .log-line{padding:2px 0}
 .log-info{color:#b8f5c9}
 .log-warn{color:#ffd66a}
