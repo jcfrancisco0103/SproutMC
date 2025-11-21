@@ -172,7 +172,7 @@ if(el('checkUpdates')){
 if(el('applyUpdate')){
   el('applyUpdate').onclick=async()=>{
     const out=el('updatesOut'); if(out) out.textContent='Updating...'
-    try{const r=await apiFetch('/api/update/apply',{method:'POST'});const j=await r.json();if(out) out.textContent=`Update completed.\n${j.output||''}`}
+    try{const r=await apiFetch('/api/update/apply',{method:'POST'});const j=await r.json();if(out) out.textContent=`Update completed.\n${j.output||''}${j.newVersion?`\nVersion bumped to ${j.newVersion}`:''}`;const v=el('cfgVersion');if(v&&j.newVersion)v.value=j.newVersion}
     catch(e){if(out) out.textContent='Update failed'}
   }
 }

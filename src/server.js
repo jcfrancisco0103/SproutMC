@@ -167,7 +167,7 @@ function startServer() {
     status = { online: false, crashed, starting: false, stopping: false }
     appendConsole(`[WRAPPER] Server exited code=${code} signal=${signal}`)
     broadcast('status', status)
-    if (restartPending) { restartPending = false; startServer() }
+    if (restartPending) { restartPending = false; const d=3000; appendConsole(`[WRAPPER] Restarting in ${d}ms`); setTimeout(()=>{ startServer() }, d) }
     else if (crashed && cfg.autoRestart) scheduleAutoRestart()
   })
 }
@@ -499,7 +499,23 @@ app.post('/api/update/apply', requireAuth, (req, res) => {
     let idx = 0
     let out = ''
     const runNext = () => {
-      if (idx >= steps.length) { audit(req.user.username, 'update_apply', {}); return res.json({ ok: true, output: out }) }
+      if (idx >= steps.length) {
+        try {
+          const pkgPath = path.resolve('package.json')
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+          const parts = String(pkg.version||'0.0.0').split('.')
+          const major = parseInt(parts[0]||'0',10)
+          const minor = parseInt(parts[1]||'0',10)
+          const patch = parseInt(parts[2]||'0',10) + 1
+          pkg.version = `${isNaN(major)?0:major}.${isNaN(minor)?0:minor}.${isNaN(patch)?0:patch}`
+          fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2))
+          audit(req.user.username, 'update_apply', { newVersion: pkg.version })
+          return res.json({ ok: true, output: out, newVersion: pkg.version })
+        } catch (e) {
+          audit(req.user.username, 'update_apply', { error: 'version_bump_failed' })
+          return res.json({ ok: true, output: out })
+        }
+      }
       const [exe,args] = steps[idx++]
       const p = child_process.spawn(exe, args, { cwd: process.cwd() })
       p.stdout.on('data', d => { out += d.toString() })
