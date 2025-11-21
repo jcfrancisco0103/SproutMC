@@ -40,6 +40,7 @@ let currentLogStream = null
 let metricsCache = { cpu: null, memory: null, diskUsedBytes: null, tps: null, players: { count: 0, list: [] } }
 const playersOnline = new Set()
 let restartPending = false
+let terminalBuffer = []
 
 function rotateLogIfNeeded() {
   const d = new Date().toISOString().slice(0, 10)
@@ -93,6 +94,12 @@ function appendConsole(line) {
     broadcast('metrics', metricsCache)
   } catch {}
   broadcast('console', { line })
+}
+
+function appendTerminal(line) {
+  terminalBuffer.push(line)
+  if (terminalBuffer.length > 1000) terminalBuffer.shift()
+  broadcast('terminal', { line })
 }
 
 function safeResolve(p) {
@@ -445,7 +452,8 @@ app.get('/api/settings/config', requireAuth, (req, res) => {
       serverJar: c.serverJar,
       jvmArgs: c.jvmArgs,
       autoRestart: c.autoRestart,
-      autoRestartMaxBackoffSeconds: c.autoRestartMaxBackoffSeconds
+      autoRestartMaxBackoffSeconds: c.autoRestartMaxBackoffSeconds,
+      terminalElevate: !!c.terminalElevate
     }
     res.json(out)
   } catch { res.status(500).json({ error: 'read_failed' }) }
@@ -454,7 +462,7 @@ app.get('/api/settings/config', requireAuth, (req, res) => {
 app.post('/api/settings/config', requireAuth, (req, res) => {
   try {
     const c = JSON.parse(fs.readFileSync(path.resolve('config.json'), 'utf8'))
-    const allowed = ['instanceRoot','javaPath','serverJar','jvmArgs','autoRestart','autoRestartMaxBackoffSeconds']
+    const allowed = ['instanceRoot','javaPath','serverJar','jvmArgs','autoRestart','autoRestartMaxBackoffSeconds','terminalElevate']
     for (const k of allowed) {
       if (req.body[k] !== undefined) c[k] = req.body[k]
     }
@@ -531,21 +539,32 @@ app.post('/api/terminal/exec', requireAuth, (req, res) => {
   try {
     const cmd = String((req.body||{}).cmd||'').trim()
     if (!cmd) return res.status(400).json({ error: 'no_command' })
+    appendTerminal(`[TERM] $ ${cmd}`)
     let proc
     if (process.platform === 'win32') {
       proc = child_process.spawn('powershell', ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command', cmd], { cwd: process.cwd() })
     } else {
       const sh = '/bin/bash'
-      proc = child_process.spawn(sh, ['-lc', cmd], { cwd: process.cwd() })
+      const elev = !!cfg.terminalElevate
+      const isRoot = typeof process.getuid === 'function' ? (process.getuid() === 0) : false
+      if (elev && !isRoot) {
+        proc = child_process.spawn('sudo', ['-n', sh, '-lc', cmd], { cwd: process.cwd() })
+      } else {
+        proc = child_process.spawn(sh, ['-lc', cmd], { cwd: process.cwd() })
+      }
     }
-    let stdout = ''
-    let stderr = ''
-    let finished = false
     const timer = setTimeout(() => { try { proc.kill('SIGINT') } catch {} }, 5*60*1000)
-    proc.stdout.on('data', d => { stdout += d.toString() })
-    proc.stderr.on('data', d => { stderr += d.toString() })
-    proc.on('error', e => { if (finished) return; finished = true; clearTimeout(timer); res.status(500).json({ error: 'exec_failed', message: String(e) }) })
-    proc.on('close', code => { if (finished) return; finished = true; clearTimeout(timer); audit(req.user.username, 'terminal_exec', { cmd, code }); res.json({ exitCode: code, stdout, stderr }) })
+    proc.stdout.on('data', d => {
+      const s = d.toString()
+      s.split(/\r?\n/).forEach(l => { if (l) appendTerminal(l) })
+    })
+    proc.stderr.on('data', d => {
+      const s = d.toString()
+      s.split(/\r?\n/).forEach(l => { if (l) appendTerminal(l) })
+    })
+    proc.on('error', e => { clearTimeout(timer); appendTerminal(`[TERM] error: ${String(e)}`) })
+    proc.on('close', code => { clearTimeout(timer); audit(req.user.username, 'terminal_exec', { cmd, code }); appendTerminal(`[TERM] exit ${code}`) })
+    res.json({ ok: true })
   } catch { res.status(500).json({ error: 'exec_failed' }) }
 })
 

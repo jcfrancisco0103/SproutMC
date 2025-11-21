@@ -146,6 +146,7 @@
             <div class="form-row"><label class="form-label">JVM Args</label><textarea id="cfgJvmArgs" rows="6" class="form-input"></textarea></div>
               <div class="form-row"><label class="form-label">Auto Restart</label><label class="switch"><input type="checkbox" id="cfgAutoRestart"><span class="slider"></span></label></div>
               <div class="form-row"><label class="form-label">Max Backoff (s)</label><input id="cfgMaxBackoff" type="number" min="1" class="form-input" /></div>
+              <div class="form-row"><label class="form-label">Terminal Elevate (Linux)</label><label class="switch"><input type="checkbox" id="cfgTerminalElevate"><span class="slider"></span></label></div>
             </div>
             <div class="row">
               <button id="cfgSave">Save Config</button>
@@ -168,7 +169,7 @@
             <input id="termCmd" class="form-input" placeholder="Enter command" />
             <button id="termRun">Run</button>
           </div>
-          <pre id="termOut"></pre>
+          <div class="console" id="termOut"></div>
         </div>
       </section>
     </main>

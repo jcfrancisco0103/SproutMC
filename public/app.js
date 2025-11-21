@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded',()=>{const t=localStorage.getItem('
 function auth(){return{Authorization:`Bearer ${token}`}}
 function apiFetch(url,opt){const o=opt||{};o.headers={...(o.headers||{}),...auth()};return fetch(url,o).then(r=>{if(r.status===401){localStorage.removeItem('token');location.href='/login.html'};return r})}
 function apiUpload(url,fd,onp){return new Promise((resolve,reject)=>{const x=new XMLHttpRequest();x.open('POST',url);const h=auth();Object.keys(h).forEach(k=>x.setRequestHeader(k,h[k]));x.upload.onprogress=e=>{if(e.lengthComputable&&onp)onp(Math.round(e.loaded*100/e.total))};x.onload=()=>resolve({ok:x.status>=200&&x.status<300,status:x.status,body:x.responseText});x.onerror=()=>reject(new TypeError('network_error'));x.send(fd)})}
-function connectWS(){ws=new WebSocket(`ws://${location.host}`);ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='console'){appendConsole(m.payload.line)}if(m.type==='status'){updateStatus(m.payload)}if(m.type==='metrics'){updateMetrics(m.payload)}}}
+function connectWS(){ws=new WebSocket(`ws://${location.host}`);ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='console'){appendConsole(m.payload.line)}if(m.type==='status'){updateStatus(m.payload)}if(m.type==='metrics'){updateMetrics(m.payload)}if(m.type==='terminal'){appendTerminalLine(m.payload.line)}}}
 function updateStatus(s){el('statusText').textContent=`${s.online?'Online':'Offline'}${s.crashed?' (crashed)':''}`;el('statusBar').textContent=el('statusText').textContent}
 async function loadStatus(){const r=await apiFetch('/api/status');const j=await r.json();updateStatus(j.status);updateMetrics(j.metrics)}
 function stripAnsi(s){return s.replace(/\x1b\[[0-9;]*m/g,'')}
@@ -131,8 +131,8 @@ if(el('propsSave')){
 if(el('propsSaveRestart')){
   el('propsSaveRestart').onclick=async()=>{const inputs=[...el('propsForm').querySelectorAll('input[data-key]')];const props={};inputs.forEach(i=>props[i.dataset.key]=i.value);await apiFetch('/api/settings/server-properties',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({properties:props})});await apiFetch('/api/restart',{method:'POST'})}
 }
-async function loadConfig(){const r=await apiFetch('/api/settings/config');const j=await r.json();el('cfgInstanceRoot').value=j.instanceRoot||'';el('cfgJavaPath').value=j.javaPath||'';el('cfgServerJar').value=j.serverJar||'';el('cfgJvmArgs').value=(j.jvmArgs||[]).join(' ');el('cfgAutoRestart').checked=!!j.autoRestart;el('cfgMaxBackoff').value=j.autoRestartMaxBackoffSeconds||300}
-el('cfgSave').onclick=async()=>{const body={instanceRoot:el('cfgInstanceRoot').value,javaPath:el('cfgJavaPath').value,serverJar:el('cfgServerJar').value,jvmArgs:(el('cfgJvmArgs').value||'').split(/\s+/).filter(Boolean),autoRestart:el('cfgAutoRestart').checked,autoRestartMaxBackoffSeconds:parseInt(el('cfgMaxBackoff').value||'300',10)};await apiFetch('/api/settings/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}
+async function loadConfig(){const r=await apiFetch('/api/settings/config');const j=await r.json();el('cfgInstanceRoot').value=j.instanceRoot||'';el('cfgJavaPath').value=j.javaPath||'';el('cfgServerJar').value=j.serverJar||'';el('cfgJvmArgs').value=(j.jvmArgs||[]).join(' ');el('cfgAutoRestart').checked=!!j.autoRestart;el('cfgMaxBackoff').value=j.autoRestartMaxBackoffSeconds||300;const te=el('cfgTerminalElevate');if(te)te.checked=!!j.terminalElevate}
+el('cfgSave').onclick=async()=>{const body={instanceRoot:el('cfgInstanceRoot').value,javaPath:el('cfgJavaPath').value,serverJar:el('cfgServerJar').value,jvmArgs:(el('cfgJvmArgs').value||'').split(/\s+/).filter(Boolean),autoRestart:el('cfgAutoRestart').checked,autoRestartMaxBackoffSeconds:parseInt(el('cfgMaxBackoff').value||'300',10),terminalElevate:el('cfgTerminalElevate').checked};await apiFetch('/api/settings/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}
 document.addEventListener('DOMContentLoaded',loadConfig)
 function formatBytes(n){if(n==null)return'';const u=['B','KB','MB','GB','TB'];let i=0;let v=n;while(v>1024&&i<u.length-1){v/=1024;i++}return v.toFixed(1)+' '+u[i]}
 
@@ -152,12 +152,12 @@ if(el('termRun')){
     const cmd=el('termCmd').value
     if(!cmd)return
     el('termRun').disabled=true
-    el('termOut').textContent=''
+    const out=el('termOut'); if(out) out.innerHTML=''
     try{
       const r=await apiFetch('/api/terminal/exec',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cmd})})
-      const j=await r.json()
-      el('termOut').textContent=(j.stdout||'')+(j.stderr||'')+`\n[exit ${j.exitCode}]`
+      if(!r.ok){alert('Terminal failed to start')}
     }catch{}
     finally{el('termRun').disabled=false}
   }
 }
+function appendTerminalLine(line){const out=el('termOut');if(out){renderColoredLine(line,out);trimConsole(out)}}
