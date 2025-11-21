@@ -18,8 +18,21 @@ else
 fi
 
 if [ "$NODE_MAJOR" -lt 16 ]; then
+  set +e
   curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-  DEBIAN_FRONTEND=noninteractive apt install -y nodejs
+  DEBIAN_FRONTEND=noninteractive apt purge -y libnode-dev nodejs npm
+  DEBIAN_FRONTEND=noninteractive apt -y -o Dpkg::Options::=--force-overwrite install nodejs
+  NODE_INSTALL_RC=$?
+  set -e
+  if [ "$NODE_INSTALL_RC" -ne 0 ]; then
+    export NVM_DIR="$HOME/.nvm"
+    if [ ! -d "$NVM_DIR" ]; then
+      curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+    fi
+    . "$NVM_DIR/nvm.sh"
+    nvm install 18
+    nvm use 18
+  fi
 else
   DEBIAN_FRONTEND=noninteractive apt install -y nodejs npm
 fi
