@@ -12,6 +12,7 @@ const pidusage = require('pidusage')
 const jwt = require('jsonwebtoken')
 const bcrypt = require('bcryptjs')
 const cron = require('node-cron')
+const https = require('https')
 
 const cfg = JSON.parse(fs.readFileSync(path.resolve('config.json'), 'utf8'))
 const app = express()
@@ -446,6 +447,7 @@ app.post('/api/settings/server-properties', requireAuth, (req, res) => {
 app.get('/api/settings/config', requireAuth, (req, res) => {
   try {
     const c = JSON.parse(fs.readFileSync(path.resolve('config.json'), 'utf8'))
+    const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'))
     const out = {
       instanceRoot: c.instanceRoot,
       javaPath: c.javaPath,
@@ -453,7 +455,8 @@ app.get('/api/settings/config', requireAuth, (req, res) => {
       jvmArgs: c.jvmArgs,
       autoRestart: c.autoRestart,
       autoRestartMaxBackoffSeconds: c.autoRestartMaxBackoffSeconds,
-      terminalElevate: !!c.terminalElevate
+      terminalElevate: !!c.terminalElevate,
+      version: pkg.version
     }
     res.json(out)
   } catch { res.status(500).json({ error: 'read_failed' }) }
@@ -470,6 +473,42 @@ app.post('/api/settings/config', requireAuth, (req, res) => {
     audit(req.user.username, 'edit_config', {})
     res.json({ ok: true })
   } catch { res.status(500).json({ error: 'write_failed' }) }
+})
+
+app.get('/api/update/check', requireAuth, (req, res) => {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'))
+    const url = 'https://api.github.com/repos/jcfrancisco0103/SproutMC/releases/latest'
+    const opts = { headers: { 'User-Agent': 'SproutMC-Wrapper' } }
+    https.get(url, opts, (r) => {
+      let data = ''
+      r.on('data', d => data += d.toString())
+      r.on('end', () => {
+        try {
+          const j = JSON.parse(data)
+          res.json({ currentVersion: pkg.version, latestTag: j.tag_name, latestName: j.name, publishedAt: j.published_at, htmlUrl: j.html_url })
+        } catch { res.status(500).json({ error: 'parse_failed' }) }
+      })
+    }).on('error', () => res.status(500).json({ error: 'network_failed' }))
+  } catch { res.status(500).json({ error: 'check_failed' }) }
+})
+
+app.post('/api/update/apply', requireAuth, (req, res) => {
+  try {
+    const steps = [ ['git',['fetch','origin','--tags']], ['git',['pull','--ff-only']] ]
+    let idx = 0
+    let out = ''
+    const runNext = () => {
+      if (idx >= steps.length) { audit(req.user.username, 'update_apply', {}); return res.json({ ok: true, output: out }) }
+      const [exe,args] = steps[idx++]
+      const p = child_process.spawn(exe, args, { cwd: process.cwd() })
+      p.stdout.on('data', d => { out += d.toString() })
+      p.stderr.on('data', d => { out += d.toString() })
+      p.on('error', () => { res.status(500).json({ error: 'update_failed', output: out }) })
+      p.on('close', code => { if (code !== 0) return res.status(500).json({ error: 'update_failed', exitCode: code, output: out }); runNext() })
+    }
+    runNext()
+  } catch { res.status(500).json({ error: 'update_failed' }) }
 })
 
 app.get('/api/plugins', requireAuth, (req, res) => {

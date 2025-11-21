@@ -131,7 +131,7 @@ if(el('propsSave')){
 if(el('propsSaveRestart')){
   el('propsSaveRestart').onclick=async()=>{const inputs=[...el('propsForm').querySelectorAll('input[data-key]')];const props={};inputs.forEach(i=>props[i.dataset.key]=i.value);await apiFetch('/api/settings/server-properties',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({properties:props})});await apiFetch('/api/restart',{method:'POST'})}
 }
-async function loadConfig(){const r=await apiFetch('/api/settings/config');const j=await r.json();el('cfgInstanceRoot').value=j.instanceRoot||'';el('cfgJavaPath').value=j.javaPath||'';el('cfgServerJar').value=j.serverJar||'';el('cfgJvmArgs').value=(j.jvmArgs||[]).join(' ');el('cfgAutoRestart').checked=!!j.autoRestart;el('cfgMaxBackoff').value=j.autoRestartMaxBackoffSeconds||300;const te=el('cfgTerminalElevate');if(te)te.checked=!!j.terminalElevate}
+async function loadConfig(){const r=await apiFetch('/api/settings/config');const j=await r.json();el('cfgInstanceRoot').value=j.instanceRoot||'';el('cfgJavaPath').value=j.javaPath||'';el('cfgServerJar').value=j.serverJar||'';el('cfgJvmArgs').value=(j.jvmArgs||[]).join(' ');el('cfgAutoRestart').checked=!!j.autoRestart;el('cfgMaxBackoff').value=j.autoRestartMaxBackoffSeconds||300;const te=el('cfgTerminalElevate');if(te)te.checked=!!j.terminalElevate;const v=el('cfgVersion');if(v)v.value=j.version||''}
 el('cfgSave').onclick=async()=>{const body={instanceRoot:el('cfgInstanceRoot').value,javaPath:el('cfgJavaPath').value,serverJar:el('cfgServerJar').value,jvmArgs:(el('cfgJvmArgs').value||'').split(/\s+/).filter(Boolean),autoRestart:el('cfgAutoRestart').checked,autoRestartMaxBackoffSeconds:parseInt(el('cfgMaxBackoff').value||'300',10),terminalElevate:el('cfgTerminalElevate').checked};await apiFetch('/api/settings/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}
 document.addEventListener('DOMContentLoaded',loadConfig)
 function formatBytes(n){if(n==null)return'';const u=['B','KB','MB','GB','TB'];let i=0;let v=n;while(v>1024&&i<u.length-1){v/=1024;i++}return v.toFixed(1)+' '+u[i]}
@@ -161,3 +161,18 @@ if(el('termRun')){
   }
 }
 function appendTerminalLine(line){const out=el('termOut');if(out){renderColoredLine(line,out);trimConsole(out)}}
+if(el('checkUpdates')){
+  el('checkUpdates').onclick=async()=>{
+    const out=el('updatesOut'); if(out) out.textContent='Checking...'
+    try{const r=await apiFetch('/api/update/check');const j=await r.json();if(out) out.textContent=`Current: ${j.currentVersion}\nLatest: ${j.latestName} (${j.latestTag})\nPublished: ${j.publishedAt}\nURL: ${j.htmlUrl}`}
+    catch(e){if(out) out.textContent='Failed to check updates'}
+  }
+}
+
+if(el('applyUpdate')){
+  el('applyUpdate').onclick=async()=>{
+    const out=el('updatesOut'); if(out) out.textContent='Updating...'
+    try{const r=await apiFetch('/api/update/apply',{method:'POST'});const j=await r.json();if(out) out.textContent=`Update completed.\n${j.output||''}`}
+    catch(e){if(out) out.textContent='Update failed'}
+  }
+}

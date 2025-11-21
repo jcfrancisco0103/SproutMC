@@ -143,10 +143,13 @@
               <div class="form-row"><label class="form-label">Instance Root</label><input id="cfgInstanceRoot" class="form-input" /></div>
               <div class="form-row"><label class="form-label">Java Path</label><input id="cfgJavaPath" class="form-input" /></div>
               <div class="form-row"><label class="form-label">Server Jar</label><input id="cfgServerJar" class="form-input" /></div>
-            <div class="form-row"><label class="form-label">JVM Args</label><textarea id="cfgJvmArgs" rows="6" class="form-input"></textarea></div>
+              <div class="form-row"><label class="form-label">JVM Args</label><textarea id="cfgJvmArgs" rows="6" class="form-input"></textarea></div>
               <div class="form-row"><label class="form-label">Auto Restart</label><label class="switch"><input type="checkbox" id="cfgAutoRestart"><span class="slider"></span></label></div>
               <div class="form-row"><label class="form-label">Max Backoff (s)</label><input id="cfgMaxBackoff" type="number" min="1" class="form-input" /></div>
               <div class="form-row"><label class="form-label">Terminal Elevate (Linux)</label><label class="switch"><input type="checkbox" id="cfgTerminalElevate"><span class="slider"></span></label></div>
+              <div class="form-row"><label class="form-label">Current Version</label><input id="cfgVersion" class="form-input" disabled /></div>
+              <div class="form-row"><label class="form-label">Updates</label><div class="row"><button id="checkUpdates">Check for Updates</button><button id="applyUpdate">Apply Update</button></div></div>
+              <div class="form-row"><label class="form-label">Latest Release</label><pre id="updatesOut"></pre></div>
             </div>
             <div class="row">
               <button id="cfgSave">Save Config</button>
