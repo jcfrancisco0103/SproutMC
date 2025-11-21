@@ -130,6 +130,10 @@ function startServer() {
   if (mcProcess || status.starting) return
   status.starting = true
   status.crashed = false
+  try {
+    const eulaPath = path.resolve(cfg.instanceRoot, 'eula.txt')
+    if (!fs.existsSync(eulaPath)) fs.writeFileSync(eulaPath, 'eula=true' + os.EOL)
+  } catch {}
   function sanitizeJvmArgs(list){
     const out = []
     for (const a of (list||[])){
@@ -144,7 +148,10 @@ function startServer() {
   let exec = String(cfg.javaPath||'java').trim()
   let extra = []
   if (/\s-/.test(exec)) { const parts = exec.split(/\s+/); exec = parts.shift(); extra = parts }
-  const args = [...extra, ...sanitizeJvmArgs(cfg.jvmArgs||[]), '-jar', path.resolve(cfg.serverJar), 'nogui']
+  const aikar = cfg.aikarFlags ? ['-XX:+UseG1GC','-XX:+ParallelRefProcEnabled','-XX:MaxGCPauseMillis=200','-XX:+UnlockExperimentalVMOptions','-XX:+DisableExplicitGC','-XX:+AlwaysPreTouch','-XX:G1NewSizePercent=30','-XX:G1MaxNewSizePercent=40','-XX:G1HeapRegionSize=8M','-XX:G1ReservePercent=20','-XX:G1HeapWastePercent=5','-XX:G1MixedGCCountTarget=4','-XX:InitiatingHeapOccupancyPercent=15','-XX:SoftRefLRUPolicyMSPerMB=50','-XX:SurvivorRatio=32','-XX:+PerfDisableSharedMem','-XX:MaxTenuringThreshold=1'] : []
+  const jarPath = path.resolve(cfg.serverJar)
+  if (!fs.existsSync(jarPath)) { appendConsole('[WRAPPER] Server jar not found: '+jarPath); status.starting=false; broadcast('status', status); return }
+  const args = [...extra, ...aikar, ...sanitizeJvmArgs(cfg.jvmArgs||[]), '-jar', jarPath, 'nogui']
   mcProcess = child_process.spawn(exec, args, { cwd: path.resolve(cfg.instanceRoot) })
   backoffSeconds = 1
   rotateLogIfNeeded()
