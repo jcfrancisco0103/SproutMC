@@ -3,6 +3,7 @@
 body{font-family:system-ui,Segoe UI,Arial;margin:0;background:radial-gradient(800px 300px at 10% 0%,#0f1b13 0%,var(--sprout-bg) 40%),radial-gradient(800px 300px at 90% 0%,#112019 0%,var(--sprout-bg) 40%);color:var(--sprout-text);transition:background .3s ease,color .3s ease}
 header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:linear-gradient(180deg,#101912 0%,var(--sprout-surface) 100%);border-bottom:1px solid var(--sprout-border)}
 .brand{display:flex;align-items:center;gap:10px;font-weight:700}
+.brand-logo{width:28px;height:28px;object-fit:contain}
 .header-actions{display:flex;align-items:center;gap:8px}
 .status-pill{padding:6px 10px;border:1px solid var(--sprout-border);border-radius:999px;background:var(--sprout-surface-2)}
 .status-pill.status-online{background:linear-gradient(180deg,#163021,#1f3f2c);color:#a6f5bf;border-color:#2aa54b}

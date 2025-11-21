@@ -1,6 +1,6 @@
 {
   "name": "sproutmc-wrapper",
-  "version": "v1.1.9",
+  "version": "v1.2.9",
   "private": true,
   "type": "commonjs",
   "scripts": {
