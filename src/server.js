@@ -494,7 +494,8 @@ app.get('/api/update/check', requireAuth, (req, res) => {
 
 app.post('/api/update/apply', requireAuth, (req, res) => {
   try {
-    const steps = [ ['git',['fetch','origin','--tags']], ['git',['pull','--ff-only']] ]
+    const stashMsg = `sproutmc-update-${Date.now()}`
+    const steps = [ ['git',['stash','push','-u','-m',stashMsg]], ['git',['fetch','origin','--tags']], ['git',['pull','--ff-only']] ]
     let idx = 0
     let out = ''
     const runNext = () => {
