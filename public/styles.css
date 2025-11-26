@@ -81,8 +81,8 @@ textarea#editorContent{width:100%;height:360px;background:#0c100d;color:var(--sp
 body.modal-open{overflow:hidden}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px}
 .modal-overlay.hidden{display:none !important}
-.modal{width:min(900px,90vw);background:linear-gradient(180deg,var(--sprout-surface),var(--sprout-surface-2));border:1px solid var(--sprout-border);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.35);padding:14px}
-.modal textarea#editorContent{height:60vh}
+.modal{width:min(1200px,95vw);max-height:90vh;background:linear-gradient(180deg,var(--sprout-surface),var(--sprout-surface-2));border:1px solid var(--sprout-border);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.35);padding:18px;display:flex;flex-direction:column}
+.modal textarea#editorContent{height:72vh}
 /* Settings form */
 .form-grid{display:flex;flex-direction:column;gap:12px;margin-top:8px}
 .form-row{display:flex;flex-direction:column;gap:6px}
