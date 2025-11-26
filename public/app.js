@@ -71,7 +71,7 @@ el('backBtn').onclick=()=>{if(!filesHistory.length)return;const prev=filesHistor
 const origBrowse=()=>loadFiles(el('pathInput').value)
 el('browseBtn').onclick=()=>{filesHistory.push(el('pathInput').value);origBrowse()}
 el('selectAllFiles').onclick=()=>{const t=el('fileTable');const p=el('pathInput').value;const rows=[...t.querySelectorAll('tr')].slice(1);rows.forEach(tr=>{const cb=tr.querySelector('input[type="checkbox"]');const a=tr.querySelector('td:nth-child(2) a');const name=a?a.textContent.trim():'';if(cb&&name){cb.checked=true;selectedFiles.add(pathJoin(p,name))}})}
-const editableExt=['.yml','.yaml','.json','.properties','.txt','.cfg','.ini','.md','.config','.confi','.conf']
+const editableExt=['.yml','.yaml','.json','.properties','.txt','.cfg','.ini','.md','.config','.confi','.conf','.key']
 function isEditable(name){const i=name.lastIndexOf('.');if(i<0)return false;const ext=name.slice(i).toLowerCase();return editableExt.includes(ext)}
 function openEditor(fullPath){el('editorPath').textContent=fullPath;document.body.classList.add('modal-open');el('editor').classList.remove('hidden');apiFetch('/api/fs/read?path='+encodeURIComponent(fullPath)).then(r=>r.json()).then(j=>{el('editorContent').value=j.content})}
 el('editorClose').onclick=()=>{document.body.classList.remove('modal-open');el('editor').classList.add('hidden')}
