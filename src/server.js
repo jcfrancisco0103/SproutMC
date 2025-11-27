@@ -763,3 +763,35 @@ const PORT = process.env.PORT || 3000
 server.listen(PORT, () => {
   console.log(`Wrapper listening on http://localhost:${PORT}`)
 })
+function findItemsAdderZip() {
+  try {
+    const base = safeResolve('plugins/ItemsAdder')
+    if (!fs.existsSync(base)) return null
+    const prefer = ['ItemsAdder.zip','resource_pack.zip']
+    const stack = [base]
+    let fallback = null
+    while (stack.length) {
+      const dir = stack.pop()
+      const entries = fs.readdirSync(dir, { withFileTypes: true })
+      for (const e of entries) {
+        const p = path.join(dir, e.name)
+        if (e.isDirectory()) stack.push(p)
+        else if (/\.zip$/i.test(e.name)) {
+          if (prefer.includes(e.name)) return p
+          if (!fallback) fallback = p
+        }
+      }
+    }
+    return fallback
+  } catch { return null }
+}
+
+app.get('/rp', (req, res) => {
+  try {
+    const p = findItemsAdderZip()
+    if (!p) return res.status(404).json({ error: 'not_found' })
+    res.setHeader('Cache-Control', 'public, max-age=3600')
+    res.setHeader('Content-Type', 'application/zip')
+    res.download(p, path.basename(p))
+  } catch { res.status(500).json({ error: 'serve_failed' }) }
+})
