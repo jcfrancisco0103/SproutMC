@@ -8,6 +8,7 @@ const child_process = require('child_process')
 const os = require('os')
 const multer = require('multer')
 const archiver = require('archiver')
+const AdmZip = require('adm-zip')
 const pidusage = require('pidusage')
 const jwt = require('jsonwebtoken')
 const bcrypt = require('bcryptjs')
@@ -420,6 +421,19 @@ app.post('/api/fs/delete', requireAuth, (req, res) => {
     audit(req.user.username, 'delete', { path: p })
     res.json({ ok: true })
   } catch { res.status(400).json({ error: 'bad_path' }) }
+})
+
+app.post('/api/fs/unzip', requireAuth, (req, res) => {
+  try {
+    const src = safeResolve(req.body.path)
+    const dest = safeResolve(req.body.dest || '.')
+    if (!fs.existsSync(src) || !src.toLowerCase().endsWith('.zip')) return res.status(400).json({ error: 'not_zip' })
+    fse.ensureDirSync(dest)
+    const zip = new AdmZip(src)
+    zip.extractAllTo(dest, true)
+    audit(req.user.username, 'unzip', { src, dest })
+    res.json({ ok: true })
+  } catch { res.status(400).json({ error: 'unzip_failed' }) }
 })
 
 app.get('/api/settings/server-properties', requireAuth, (req, res) => {
