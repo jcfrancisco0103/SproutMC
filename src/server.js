@@ -436,6 +436,19 @@ app.post('/api/fs/unzip', requireAuth, (req, res) => {
   } catch { res.status(400).json({ error: 'unzip_failed' }) }
 })
 
+app.get('/api/fs/unzip', requireAuth, (req, res) => {
+  try {
+    const src = safeResolve(req.query.path)
+    const dest = safeResolve(req.query.dest || '.')
+    if (!fs.existsSync(src) || !src.toLowerCase().endsWith('.zip')) return res.status(400).json({ error: 'not_zip' })
+    fse.ensureDirSync(dest)
+    const zip = new AdmZip(src)
+    zip.extractAllTo(dest, true)
+    audit(req.user.username, 'unzip', { src, dest })
+    res.json({ ok: true })
+  } catch { res.status(400).json({ error: 'unzip_failed' }) }
+})
+
 app.get('/api/settings/server-properties', requireAuth, (req, res) => {
   try {
     const p = safeResolve('server.properties')
