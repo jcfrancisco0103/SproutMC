@@ -27,6 +27,7 @@
       <button data-tab="files">Files</button>
       <button data-tab="plugins">Plugins</button>
       <button data-tab="backups">Backups</button>
+      <button data-tab="servers">Servers</button>
       <button data-tab="tasks">Tasks</button>
       <button data-tab="worlds">Worlds</button>
       <button data-tab="settings">Settings</button>
@@ -113,6 +114,18 @@
           <button id="backupCreate">Create Backup</button>
         </div>
         <table id="backupTable"></table>
+      </section>
+      <section id="servers" class="tab hidden">
+        <div class="card">
+          <h3>Servers</h3>
+          <div class="row">
+            <input id="serverName" placeholder="New server name" />
+            <button id="serverCreate" class="btn-accent">Create</button>
+            <div style="flex:1"></div>
+            <span id="serverActive"></span>
+          </div>
+          <table id="serverTable"></table>
+        </div>
       </section>
       <section id="tasks" class="tab hidden">
         <div class="row">

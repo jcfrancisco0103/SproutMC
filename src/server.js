@@ -26,9 +26,11 @@ app.use(express.static(path.resolve('public')))
 const dataDir = path.resolve('data')
 const logsDir = path.resolve('logs')
 const backupsDir = path.resolve('backups')
+const instancesDir = path.resolve('instances')
 fse.ensureDirSync(dataDir)
 fse.ensureDirSync(logsDir)
 fse.ensureDirSync(backupsDir)
+fse.ensureDirSync(instancesDir)
 fse.ensureDirSync(path.resolve(cfg.instanceRoot))
 fse.ensureDirSync(path.join(dataDir, 'uploads'))
 
@@ -833,4 +835,57 @@ app.get('/generated.zip', (req, res) => {
     res.setHeader('Content-Type', 'application/zip')
     res.download(p, 'generated.zip')
   } catch { res.status(500).json({ error: 'serve_failed' }) }
+})
+function sanitizeName(name){return String(name||'').replace(/[^A-Za-z0-9._-]/g,'').slice(0,64)}
+function listInstances(){try{const ents=fs.readdirSync(instancesDir,{withFileTypes:true}).filter(e=>e.isDirectory()).map(e=>e.name);return ents}catch{return[]}}
+function activeInstanceName(){try{const ar=path.resolve(cfg.instanceRoot);const rel=path.relative(instancesDir,ar);if(rel&& !rel.startsWith('..')){const top=rel.split(path.sep)[0];return top||null}return null}catch{return null}}
+
+app.get('/api/instances', requireAuth, (req,res)=>{
+  try {
+    const list=listInstances()
+    const active=activeInstanceName()
+    res.json({ instances:list, active })
+  } catch { res.status(500).json({ error:'list_failed' }) }
+})
+
+app.post('/api/instances/create', requireAuth, (req,res)=>{
+  try {
+    const name=sanitizeName(req.body.name)
+    if(!name) return res.status(400).json({ error:'bad_name' })
+    const dir=path.join(instancesDir,name)
+    if(fs.existsSync(dir)) return res.status(400).json({ error:'exists' })
+    fse.ensureDirSync(dir)
+    fse.ensureDirSync(path.join(dir,'plugins'))
+    fs.writeFileSync(path.join(dir,'server.properties'),'motd=New SproutMC Server'+os.EOL)
+    audit(req.user.username,'instance_create',{ name })
+    res.json({ ok:true })
+  } catch { res.status(500).json({ error:'create_failed' }) }
+})
+
+app.post('/api/instances/select', requireAuth, (req,res)=>{
+  try {
+    const name=sanitizeName(req.body.name)
+    const dir=path.join(instancesDir,name)
+    if(!fs.existsSync(dir)) return res.status(404).json({ error:'not_found' })
+    const c=JSON.parse(fs.readFileSync(path.resolve('config.json'),'utf8'))
+    c.instanceRoot=dir
+    fs.writeFileSync(path.resolve('config.json'), JSON.stringify(c, null, 2))
+    cfg.instanceRoot=dir
+    fse.ensureDirSync(path.resolve(cfg.instanceRoot))
+    audit(req.user.username,'instance_select',{ name })
+    res.json({ ok:true })
+  } catch { res.status(500).json({ error:'select_failed' }) }
+})
+
+app.post('/api/instances/delete', requireAuth, (req,res)=>{
+  try {
+    const name=sanitizeName(req.body.name)
+    const dir=path.join(instancesDir,name)
+    const ar=activeInstanceName()
+    if(ar===name) return res.status(400).json({ error:'cannot_delete_active' })
+    if(!fs.existsSync(dir)) return res.status(404).json({ error:'not_found' })
+    fse.removeSync(dir)
+    audit(req.user.username,'instance_delete',{ name })
+    res.json({ ok:true })
+  } catch { res.status(500).json({ error:'delete_failed' }) }
 })
