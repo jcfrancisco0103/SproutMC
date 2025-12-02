@@ -378,6 +378,8 @@ app.post('/api/fs/write', requireAuth, (req, res) => {
 app.post('/api/fs/upload', requireAuth, upload.single('file'), (req, res) => {
   try {
     const dest = safeResolve(req.body.dest || '.')
+    fse.ensureDirSync(dest)
+    if (!req.file) return res.status(400).json({ error: 'no_file' })
     const target = path.join(dest, req.file.originalname)
     fse.moveSync(req.file.path, target, { overwrite: true })
     audit(req.user.username, 'upload', { target })
@@ -388,6 +390,7 @@ app.post('/api/fs/upload', requireAuth, upload.single('file'), (req, res) => {
 app.post('/api/fs/upload-multi', requireAuth, upload.array('files'), (req, res) => {
   try {
     const dest = safeResolve(req.body.dest || '.')
+    fse.ensureDirSync(dest)
     const saved = []
     for (const f of req.files || []) {
       const target = path.join(dest, f.originalname)
@@ -676,9 +679,10 @@ app.post('/api/backup/create', requireAuth, (req, res) => {
 
 app.get('/api/backups', requireAuth, (req, res) => {
   try {
+    fse.ensureDirSync(backupsDir)
     const list = fs.readdirSync(backupsDir).filter(n => n.endsWith('.zip')).map(n => ({ name: n, size: fs.statSync(path.join(backupsDir, n)).size, ts: fs.statSync(path.join(backupsDir, n)).mtimeMs }))
     res.json({ backups: list })
-  } catch { res.status(500).json({ error: 'list_failed' }) }
+  } catch { res.json({ backups: [] }) }
 })
 
 app.post('/api/backup/restore', requireAuth, (req, res) => {
