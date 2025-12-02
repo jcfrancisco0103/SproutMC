@@ -37,6 +37,9 @@ fse.ensureDirSync(path.join(dataDir, 'uploads'))
 let mcProcess = null
 let status = { online: false, crashed: false, starting: false, stopping: false }
 let consoleBuffer = []
+const procMap = new Map()
+const statusMap = new Map()
+const consoleMap = new Map()
 let wsClients = new Set()
 let backoffSeconds = 1
 let lastLogKey = null
@@ -99,7 +102,7 @@ function appendConsole(line) {
     metricsCache.players = { count: playersOnline.size, list: Array.from(playersOnline) }
     broadcast('metrics', metricsCache)
   } catch {}
-  broadcast('console', { line })
+  broadcast('console', { instance: activeInstanceName()||'root', line })
 }
 
 function appendTerminal(line) {
@@ -219,8 +222,10 @@ function sendCommand(cmd) {
 
 async function updateMetrics() {
   try {
-    if (mcProcess) {
-      const pu = await pidusage(mcProcess.pid)
+    const name = activeInstanceName()||null
+    const p = name? procMap.get(name) : null
+    if (p) {
+      const pu = await pidusage(p.pid)
       metricsCache.cpu = pu.cpu
       metricsCache.memory = pu.memory
     } else {
@@ -231,7 +236,7 @@ async function updateMetrics() {
     metricsCache.systemMemoryTotal = os.totalmem()
     metricsCache.systemMemoryFree = os.freemem()
   } catch {}
-  broadcast('metrics', metricsCache)
+  broadcast('metrics', { instance: activeInstanceName()||'root', metrics: metricsCache })
 }
 
 setInterval(updateMetrics, 5000)
@@ -255,7 +260,9 @@ app.post('/api/login', (req, res) => {
 })
 
 app.get('/api/status', requireAuth, (req, res) => {
-  res.json({ status, metrics: metricsCache })
+  const name = req.query.name || activeInstanceName()
+  const st = statusMap.get(name) || { online:false, crashed:false, starting:false, stopping:false }
+  res.json({ status: st, metrics: metricsCache, instance: name })
 })
 
 app.get('/api/players/online', requireAuth, (req, res) => {
@@ -265,39 +272,46 @@ app.get('/api/players/online', requireAuth, (req, res) => {
 })
 
 app.post('/api/start', requireAuth, (req, res) => {
-  startServer()
+  const name = req.body.name || activeInstanceName()
+  startInstance(name)
   audit(req.user.username, 'start', {})
   res.json({ ok: true })
 })
 
 app.post('/api/stop', requireAuth, (req, res) => {
-  stopServer()
+  const name = req.body.name || activeInstanceName()
+  stopInstance(name)
   audit(req.user.username, 'stop', {})
   res.json({ ok: true })
 })
 
 app.post('/api/restart', requireAuth, (req, res) => {
-  restartServer()
+  const name = req.body.name || activeInstanceName()
+  stopInstance(name); setTimeout(()=>startInstance(name), 2000)
   audit(req.user.username, 'restart', {})
   res.json({ ok: true })
 })
 
 app.post('/api/kill', requireAuth, (req, res) => {
-  killServer()
+  const name = req.body.name || activeInstanceName()
+  killInstance(name)
   audit(req.user.username, 'kill', {})
   res.json({ ok: true })
 })
 
 app.post('/api/console', requireAuth, (req, res) => {
-  const { command } = req.body || {}
+  const { command, name } = req.body || {}
   if (!command) return res.status(400).json({ error: 'no_command' })
-  sendCommand(command)
-  audit(req.user.username, 'console', { command })
+  const inst = name || activeInstanceName()
+  sendCommandInstance(inst, command)
+  audit(req.user.username, 'console', { command, instance: inst })
   res.json({ ok: true })
 })
 
 app.get('/api/console/tail', requireAuth, (req, res) => {
-  res.json({ lines: consoleBuffer })
+  const name = req.query.name || activeInstanceName()
+  const lines = consoleMap.get(name) || []
+  res.json({ lines })
 })
 
 app.get('/api/logs/latest', requireAuth, (req, res) => {
@@ -311,23 +325,19 @@ app.get('/api/logs/latest', requireAuth, (req, res) => {
 
 app.get('/api/console/history', requireAuth, (req, res) => {
   try {
-    rotateLogIfNeeded()
-    const p = path.join(logsDir, `server-${lastLogKey}.log`)
+    const name = req.query.name || activeInstanceName()
     let n = parseInt(String(req.query.lines || '500'), 10)
     if (!Number.isFinite(n)) n = 500
     n = Math.min(Math.max(n, 1), 2000)
-    if (!fs.existsSync(p)) return res.json({ lines: consoleBuffer.slice(-n) })
-    const txt = fs.readFileSync(p, 'utf8')
-    const lines = txt.split(/\r?\n/).filter(Boolean)
-    const out = lines.slice(Math.max(0, lines.length - n))
-    res.json({ lines: out })
+    const buf = consoleMap.get(name) || []
+    res.json({ lines: buf.slice(Math.max(0, buf.length - n)) })
   } catch { res.status(500).json({ error: 'history_failed' }) }
 })
 
 wss.on('connection', (ws, req) => {
   wsClients.add(ws)
-  ws.send(JSON.stringify({ type: 'status', payload: status }))
-  ws.send(JSON.stringify({ type: 'metrics', payload: metricsCache }))
+  ws.send(JSON.stringify({ type: 'status', payload: { instance: activeInstanceName()||'root', status } }))
+  ws.send(JSON.stringify({ type: 'metrics', payload: { instance: activeInstanceName()||'root', metrics: metricsCache } }))
   ws.on('close', () => { wsClients.delete(ws) })
 })
 
@@ -880,15 +890,6 @@ app.post('/api/instances/select', requireAuth, (req,res)=>{
     cfg.instanceRoot=dir
     cfg.serverJar=c.serverJar
     fse.ensureDirSync(path.resolve(cfg.instanceRoot))
-    try { if (mcProcess) { killServer() } } catch {}
-    mcProcess = null
-    status = { online: false, crashed: false, starting: false, stopping: false }
-    consoleBuffer = []
-    playersOnline.clear()
-    metricsCache.players = { count: 0, list: [] }
-    metricsCache.tps = null
-    broadcast('status', status)
-    broadcast('metrics', metricsCache)
     appendConsole(`[WRAPPER] Switched active server to '${name}'`)
     audit(req.user.username,'instance_select',{ name })
     res.json({ ok:true })
@@ -907,3 +908,42 @@ app.post('/api/instances/delete', requireAuth, (req,res)=>{
     res.json({ ok:true })
   } catch { res.status(500).json({ error:'delete_failed' }) }
 })
+function appendConsoleFor(name, line){
+  try {
+    const buf = consoleMap.get(name) || []
+    buf.push(line)
+    while (buf.length>1000) buf.shift()
+    consoleMap.set(name, buf)
+    broadcast('console', { instance: name, line })
+  } catch {}
+}
+
+function startInstance(name){
+  if (!name) return
+  if (procMap.get(name)) return
+  const dir = path.join(instancesDir, name)
+  const jar = path.join(dir, 'server.jar')
+  try {
+    const eulaPath = path.join(dir, 'eula.txt')
+    if (!fs.existsSync(eulaPath)) fs.writeFileSync(eulaPath, 'eula=true' + os.EOL)
+  } catch {}
+  let exec = String(cfg.javaPath||'java').trim()
+  let extra = []
+  if (/\s-/.test(exec)) { const parts = exec.split(/\s+/); exec = parts.shift(); extra = parts }
+  function sanitizeJvmArgs(list){const out=[];for(const a of (list||[])){if(typeof a!=='string')continue;const s=a.trim();if(!s.startsWith('-'))continue;const parts=s.split(/(?=-[A-Za-z])/).map(x=>x.trim()).filter(Boolean);for(const p of parts)out.push(p)}return out}
+  const aikar = cfg.aikarFlags ? ['-XX:+UseG1GC','-XX:+ParallelRefProcEnabled','-XX:MaxGCPauseMillis=200','-XX:+UnlockExperimentalVMOptions','-XX:+DisableExplicitGC','-XX:+AlwaysPreTouch','-XX:G1NewSizePercent=30','-XX:G1MaxNewSizePercent=40','-XX:G1HeapRegionSize=8M','-XX:G1ReservePercent=20','-XX:G1HeapWastePercent=5','-XX:G1MixedGCCountTarget=4','-XX:InitiatingHeapOccupancyPercent=15','-XX:SoftRefLRUPolicyMSPerMB=50','-XX:SurvivorRatio=32','-XX:+PerfDisableSharedMem','-XX:MaxTenuringThreshold=1'] : []
+  if (!fs.existsSync(jar)) { appendConsoleFor(name,'[WRAPPER] Server jar not found: '+jar); return }
+  const args = [...extra, ...aikar, ...sanitizeJvmArgs(cfg.jvmArgs||[]), '-jar', jar, 'nogui']
+  const p = child_process.spawn(exec, args, { cwd: dir })
+  procMap.set(name, p)
+  statusMap.set(name, { online: false, crashed: false, starting: true, stopping: false })
+  appendConsoleFor(name,'[WRAPPER] Starting server')
+  p.stdout.on('data', d=>{d.toString().split(/\r?\n/).forEach(l=>{if(l)appendConsoleFor(name,l)})})
+  p.stderr.on('data', d=>{d.toString().split(/\r?\n/).forEach(l=>{if(l)appendConsoleFor(name,l)})})
+  p.on('spawn', ()=>{statusMap.set(name,{ online:true, crashed:false, starting:false, stopping:false});broadcast('status',{ instance:name, status:statusMap.get(name) })})
+  p.on('exit',(code,signal)=>{procMap.delete(name);const st=statusMap.get(name)||{online:false,stopping:false};const crashed=!st.stopping;statusMap.set(name,{ online:false, crashed, starting:false, stopping:false});appendConsoleFor(name,`[WRAPPER] Server exited code=${code} signal=${signal}`);broadcast('status',{ instance:name, status:statusMap.get(name) })})
+}
+
+function stopInstance(name){const p=procMap.get(name);if(!p)return;const st=statusMap.get(name)||{stopping:false};if(st.stopping)return;statusMap.set(name,{...st,stopping:true});appendConsoleFor(name,'[WRAPPER] Saving worlds before stop');try{p.stdin.write('save-all'+os.EOL)}catch{}setTimeout(()=>{try{p.stdin.write('stop'+os.EOL)}catch{}},1500);setTimeout(()=>{if(procMap.get(name)) try{p.kill('SIGINT')}catch{}},30000)}
+function killInstance(name){const p=procMap.get(name);if(!p)return;try{p.kill('SIGKILL')}catch{}}
+function sendCommandInstance(name,cmd){const p=procMap.get(name);if(!p)return;p.stdin.write(cmd+os.EOL)}
