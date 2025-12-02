@@ -39,7 +39,7 @@ let status = { online: false, crashed: false, starting: false, stopping: false }
 let consoleBuffer = []
 let wsClients = new Set()
 let backoffSeconds = 1
-let lastLogDate = null
+let lastLogKey = null
 let currentLogStream = null
 let metricsCache = { cpu: null, memory: null, diskUsedBytes: null, tps: null, players: { count: 0, list: [] } }
 const playersOnline = new Set()
@@ -48,10 +48,12 @@ let terminalBuffer = []
 
 function rotateLogIfNeeded() {
   const d = new Date().toISOString().slice(0, 10)
-  if (d !== lastLogDate) {
+  const inst = (typeof activeInstanceName === 'function' ? (activeInstanceName()||'root') : 'root')
+  const key = `${d}-${inst}`
+  if (key !== lastLogKey) {
     if (currentLogStream) currentLogStream.end()
-    currentLogStream = fs.createWriteStream(path.join(logsDir, `server-${d}.log`), { flags: 'a' })
-    lastLogDate = d
+    currentLogStream = fs.createWriteStream(path.join(logsDir, `server-${key}.log`), { flags: 'a' })
+    lastLogKey = key
   }
 }
 
@@ -302,7 +304,7 @@ app.get('/api/logs/latest', requireAuth, (req, res) => {
   try {
     rotateLogIfNeeded()
     if (!currentLogStream) return res.status(404).json({ error: 'no_log' })
-    const p = path.join(logsDir, `server-${lastLogDate}.log`)
+    const p = path.join(logsDir, `server-${lastLogKey}.log`)
     res.download(p)
   } catch { res.status(404).json({ error: 'no_log' }) }
 })
@@ -310,7 +312,7 @@ app.get('/api/logs/latest', requireAuth, (req, res) => {
 app.get('/api/console/history', requireAuth, (req, res) => {
   try {
     rotateLogIfNeeded()
-    const p = path.join(logsDir, `server-${lastLogDate}.log`)
+    const p = path.join(logsDir, `server-${lastLogKey}.log`)
     let n = parseInt(String(req.query.lines || '500'), 10)
     if (!Number.isFinite(n)) n = 500
     n = Math.min(Math.max(n, 1), 2000)
@@ -869,9 +871,21 @@ app.post('/api/instances/select', requireAuth, (req,res)=>{
     if(!fs.existsSync(dir)) return res.status(404).json({ error:'not_found' })
     const c=JSON.parse(fs.readFileSync(path.resolve('config.json'),'utf8'))
     c.instanceRoot=dir
+    c.serverJar=path.join(dir,'server.jar')
     fs.writeFileSync(path.resolve('config.json'), JSON.stringify(c, null, 2))
     cfg.instanceRoot=dir
+    cfg.serverJar=c.serverJar
     fse.ensureDirSync(path.resolve(cfg.instanceRoot))
+    try { if (mcProcess) { killServer() } } catch {}
+    mcProcess = null
+    status = { online: false, crashed: false, starting: false, stopping: false }
+    consoleBuffer = []
+    playersOnline.clear()
+    metricsCache.players = { count: 0, list: [] }
+    metricsCache.tps = null
+    broadcast('status', status)
+    broadcast('metrics', metricsCache)
+    appendConsole(`[WRAPPER] Switched active server to '${name}'`)
     audit(req.user.username,'instance_select',{ name })
     res.json({ ok:true })
   } catch { res.status(500).json({ error:'select_failed' }) }
