@@ -358,6 +358,23 @@ app.get('/api/fs/download', requireAuth, (req, res) => {
   } catch { res.status(400).json({ error: 'bad_path' }) }
 })
 
+app.get('/api/fs/download-zip', requireAuth, (req, res) => {
+  try {
+    const root = safeResolve(req.query.path || '.')
+    const st = fs.statSync(root)
+    const name = path.basename(root) + '.zip'
+    res.setHeader('Content-Type', 'application/zip')
+    res.setHeader('Content-Disposition', `attachment; filename="${name}"`)
+    const archive = archiver('zip', { zlib: { level: 9 } })
+    archive.on('error', () => { try { res.status(500).end() } catch {} })
+    archive.pipe(res)
+    if (st.isDirectory()) archive.directory(root, path.basename(root))
+    else archive.file(root, { name: path.basename(root) })
+    archive.finalize()
+    audit(req.user.username, 'download_zip', { path: root })
+  } catch { res.status(400).json({ error: 'bad_path' }) }
+})
+
 const editableExt = new Set(['.yml','.yaml','.json','.properties','.txt','.cfg','.ini','.md','.config','.confi','.conf'])
 app.get('/api/fs/read', requireAuth, (req, res) => {
   try {
