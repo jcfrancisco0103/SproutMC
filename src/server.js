@@ -21,7 +21,7 @@ const server = http.createServer(app)
 const wss = new WebSocket.Server({ server })
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
-app.use(express.static(path.resolve('public'), { maxAge: '1h', etag: true }))
+app.use(express.static(path.resolve('public'), { maxAge: 0, etag: true }))
 
 const dataDir = path.resolve('data')
 const logsDir = path.resolve('logs')
