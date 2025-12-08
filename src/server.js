@@ -489,6 +489,21 @@ app.post('/api/fs/upload-chunk/append', requireAuth, upload.single('chunk'), (re
   } catch { res.status(500).json({ error: 'chunk_append_failed' }) }
 })
 
+app.post('/api/fs/upload-chunk/append-raw', requireAuth, express.raw({ type: 'application/octet-stream', limit: '100mb' }), (req, res) => {
+  try {
+    const id = String((req.query || {}).uploadId || '')
+    if (!id) return res.status(400).json({ error: 'no_upload_id' })
+    const part = path.join(dataDir, 'uploads', id + '.part')
+    const cur = fs.existsSync(part) ? fs.statSync(part).size : 0
+    const offset = parseInt(String(((req.query || {}).offset) || '0'), 10)
+    const buf = req.body
+    if (!buf || !(buf instanceof Buffer)) return res.status(400).json({ error: 'no_chunk' })
+    if (offset !== cur) return res.status(409).json({ error: 'offset_mismatch', current: cur })
+    fs.appendFileSync(part, buf)
+    res.json({ ok: true, nextOffset: cur + buf.length })
+  } catch { res.status(500).json({ error: 'chunk_append_failed' }) }
+})
+
 app.post('/api/fs/upload-chunk/finish', requireAuth, (req, res) => {
   try {
     const id = String(req.body.uploadId || '')
@@ -533,29 +548,71 @@ app.post('/api/fs/delete', requireAuth, (req, res) => {
   } catch { res.status(400).json({ error: 'bad_path' }) }
 })
 
-app.post('/api/fs/unzip', requireAuth, (req, res) => {
+app.post('/api/fs/unzip', requireAuth, async (req, res) => {
   try {
     const src = safeResolve(req.body.path, req.body.inst)
     const dest = safeResolve(req.body.dest || '.', req.body.inst)
-    if (!fs.existsSync(src) || !src.toLowerCase().endsWith('.zip')) return res.status(400).json({ error: 'not_zip' })
+    if (!fs.existsSync(src)) return res.status(404).json({ error: 'not_found' })
     fse.ensureDirSync(dest)
-    const zip = new AdmZip(src)
-    zip.extractAllTo(dest, true)
-    audit(req.user.username, 'unzip', { src, dest })
-    res.json({ ok: true })
+    const lower = src.toLowerCase()
+    if (lower.endsWith('.zip')) {
+      const zip = new AdmZip(src)
+      zip.extractAllTo(dest, true)
+      audit(req.user.username, 'unzip', { src, dest })
+      return res.json({ ok: true })
+    }
+    if (lower.endsWith('.rar')) {
+      const run = (cmd, args) => new Promise((resolve, reject) => {
+        try {
+          const p = child_process.spawn(cmd, args, { cwd: process.cwd() })
+          p.on('error', reject)
+          p.on('close', code => (code === 0 ? resolve(true) : reject(new Error(`exit_${code}`))))
+        } catch (e) { reject(e) }
+      })
+      try {
+        await run('unrar', ['x', '-o+', '-y', src, dest])
+      } catch (e1) {
+        try { await run('7z', ['x', '-y', src, `-o${dest}`]) }
+        catch (e2) { return res.status(500).json({ error: 'rar_extract_failed' }) }
+      }
+      audit(req.user.username, 'unrar', { src, dest })
+      return res.json({ ok: true })
+    }
+    return res.status(400).json({ error: 'unsupported_archive' })
   } catch { res.status(400).json({ error: 'unzip_failed' }) }
 })
 
-app.get('/api/fs/unzip', requireAuth, (req, res) => {
+app.get('/api/fs/unzip', requireAuth, async (req, res) => {
   try {
     const src = safeResolve(req.query.path, req.query.inst)
     const dest = safeResolve(req.query.dest || '.', req.query.inst)
-    if (!fs.existsSync(src) || !src.toLowerCase().endsWith('.zip')) return res.status(400).json({ error: 'not_zip' })
+    if (!fs.existsSync(src)) return res.status(404).json({ error: 'not_found' })
     fse.ensureDirSync(dest)
-    const zip = new AdmZip(src)
-    zip.extractAllTo(dest, true)
-    audit(req.user.username, 'unzip', { src, dest })
-    res.json({ ok: true })
+    const lower = src.toLowerCase()
+    if (lower.endsWith('.zip')) {
+      const zip = new AdmZip(src)
+      zip.extractAllTo(dest, true)
+      audit(req.user.username, 'unzip', { src, dest })
+      return res.json({ ok: true })
+    }
+    if (lower.endsWith('.rar')) {
+      const run = (cmd, args) => new Promise((resolve, reject) => {
+        try {
+          const p = child_process.spawn(cmd, args, { cwd: process.cwd() })
+          p.on('error', reject)
+          p.on('close', code => (code === 0 ? resolve(true) : reject(new Error(`exit_${code}`))))
+        } catch (e) { reject(e) }
+      })
+      try {
+        await run('unrar', ['x', '-o+', '-y', src, dest])
+      } catch (e1) {
+        try { await run('7z', ['x', '-y', src, `-o${dest}`]) }
+        catch (e2) { return res.status(500).json({ error: 'rar_extract_failed' }) }
+      }
+      audit(req.user.username, 'unrar', { src, dest })
+      return res.json({ ok: true })
+    }
+    return res.status(400).json({ error: 'unsupported_archive' })
   } catch { res.status(400).json({ error: 'unzip_failed' }) }
 })
 
