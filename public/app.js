@@ -182,8 +182,14 @@ if(el('checkUpdates')){
 if(el('applyUpdate')){
   el('applyUpdate').onclick=async()=>{
     const out=el('updatesOut'); if(out) out.textContent='Updating...'
-    try{const r=await apiFetch('/api/update/apply',{method:'POST'});const j=await r.json();if(out) out.textContent=`Update completed.\n${j.output||''}`}
-    catch(e){if(out) out.textContent='Update failed'}
+    try{
+      let r=await apiFetch('/api/update/apply',{method:'POST'});
+      if(!r.ok){r=await apiFetch('/api/update/apply')}
+      const j=await r.json();
+      if(out) out.textContent=`Update completed.\n${j.output||''}`
+    }catch(e){
+      if(out) out.textContent='Update failed'
+    }
   }
 }
 function showLoading(){const o=el('loadingOverlay');if(o)o.classList.remove('hidden')}

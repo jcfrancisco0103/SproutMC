@@ -595,6 +595,25 @@ app.post('/api/update/apply', requireAuth, (req, res) => {
   } catch { res.status(500).json({ error: 'update_failed' }) }
 })
 
+app.get('/api/update/apply', requireAuth, (req, res) => {
+  try {
+    const stashMsg = `sproutmc-update-${Date.now()}`
+    const steps = [ ['git',['stash','push','-u','-m',stashMsg]], ['git',['fetch','origin','--tags']], ['git',['pull','--ff-only']] ]
+    let idx = 0
+    let out = ''
+    const runNext = () => {
+      if (idx >= steps.length) { audit(req.user.username, 'update_apply', {}); return res.json({ ok: true, output: out }) }
+      const [exe,args] = steps[idx++]
+      const p = child_process.spawn(exe, args, { cwd: process.cwd() })
+      p.stdout.on('data', d => { out += d.toString() })
+      p.stderr.on('data', d => { out += d.toString() })
+      p.on('error', () => { res.status(500).json({ error: 'update_failed', output: out }) })
+      p.on('close', code => { if (code !== 0) return res.status(500).json({ error: 'update_failed', exitCode: code, output: out }); runNext() })
+    }
+    runNext()
+  } catch { res.status(500).json({ error: 'update_failed' }) }
+})
+
 app.get('/api/plugins', requireAuth, (req, res) => {
   try {
     const dir = safeResolve('plugins')
