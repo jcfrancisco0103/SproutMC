@@ -18,6 +18,7 @@
       <div class="header-actions">
         <div id="statusBar" class="status-pill"></div>
         <span id="activeInstanceHeader"></span>
+        <button id="updatesBtn">Updates</button>
       </div>
     </header>
     <nav class="tabs">
@@ -166,9 +167,6 @@
               <div class="form-row"><label class="form-label">Max Backoff (s)</label><input id="cfgMaxBackoff" type="number" min="1" class="form-input" /></div>
               <div class="form-row"><label class="form-label">Terminal Elevate (Linux)</label><label class="switch"><input type="checkbox" id="cfgTerminalElevate"><span class="slider"></span></label></div>
               <div class="form-row"><label class="form-label">Use Aikar Flags</label><label class="switch"><input type="checkbox" id="cfgAikarFlags"><span class="slider"></span></label></div>
-              <div class="form-row"><label class="form-label">Current Version</label><input id="cfgVersion" class="form-input" disabled /></div>
-              <div class="form-row"><label class="form-label">Updates</label><div class="row"><button id="checkUpdates">Check for Updates</button><button id="applyUpdate">Apply Update</button></div></div>
-              <div class="form-row"><label class="form-label">Latest Release</label><pre id="updatesOut"></pre></div>
             </div>
             <div class="row">
               <button id="cfgSave">Save Config</button>
@@ -196,6 +194,20 @@
       </section>
     </main>
     <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div></div>
+    <div id="updatesModal" class="modal-overlay hidden">
+      <div class="modal">
+        <div class="row">
+          <h3>Updates</h3>
+          <div style="flex:1"></div>
+          <button id="updatesClose">Close</button>
+        </div>
+        <div class="row">
+          <button id="checkUpdates">Check for Updates</button>
+          <button id="applyUpdate">Apply Update</button>
+        </div>
+        <pre id="updatesOut"></pre>
+      </div>
+    </div>
     <div id="confirm" class="modal-overlay hidden">
       <div class="modal">
         <div id="confirmText" style="margin-bottom:12px"></div>

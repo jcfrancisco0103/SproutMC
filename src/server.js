@@ -703,8 +703,7 @@ app.get('/api/update/check', requireAuth, (req, res) => {
 
 app.post('/api/update/apply', requireAuth, (req, res) => {
   try {
-    const stashMsg = `sproutmc-update-${Date.now()}`
-    const steps = [ ['git',['stash','push','-u','-m',stashMsg]], ['git',['fetch','origin','--tags']], ['git',['pull','--ff-only']] ]
+    const steps = [ ['git',['fetch','--depth=1','--no-tags','--prune','origin','main']], ['git',['pull','--ff-only','origin','main']] ]
     let idx = 0
     let out = ''
     const runNext = () => {
@@ -722,8 +721,7 @@ app.post('/api/update/apply', requireAuth, (req, res) => {
 
 app.get('/api/update/apply', requireAuth, (req, res) => {
   try {
-    const stashMsg = `sproutmc-update-${Date.now()}`
-    const steps = [ ['git',['stash','push','-u','-m',stashMsg]], ['git',['fetch','origin','--tags']], ['git',['pull','--ff-only']] ]
+    const steps = [ ['git',['fetch','--depth=1','--no-tags','--prune','origin','main']], ['git',['pull','--ff-only','origin','main']] ]
     let idx = 0
     let out = ''
     const runNext = () => {
