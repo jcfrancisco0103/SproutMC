@@ -462,6 +462,49 @@ app.post('/api/fs/upload-multi', requireAuth, upload.array('files'), (req, res) 
   } catch { res.status(400).json({ error: 'bad_path' }) }
 })
 
+// Chunked upload (start/append/finish) to avoid proxy resets on large files
+app.post('/api/fs/upload-chunk/start', requireAuth, (req, res) => {
+  try {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    fse.ensureDirSync(path.join(dataDir, 'uploads'))
+    const part = path.join(dataDir, 'uploads', id + '.part')
+    fs.writeFileSync(part, '')
+    res.json({ uploadId: id })
+  } catch { res.status(500).json({ error: 'chunk_start_failed' }) }
+})
+
+app.post('/api/fs/upload-chunk/append', requireAuth, upload.single('chunk'), (req, res) => {
+  try {
+    const id = String(req.body.uploadId || '')
+    if (!id) return res.status(400).json({ error: 'no_upload_id' })
+    const part = path.join(dataDir, 'uploads', id + '.part')
+    const cur = fs.existsSync(part) ? fs.statSync(part).size : 0
+    const offset = parseInt(String(req.body.offset || '0'), 10)
+    if (!req.file) return res.status(400).json({ error: 'no_chunk' })
+    if (offset !== cur) return res.status(409).json({ error: 'offset_mismatch', current: cur })
+    const buf = fs.readFileSync(req.file.path)
+    fs.appendFileSync(part, buf)
+    fse.removeSync(req.file.path)
+    res.json({ ok: true, nextOffset: cur + buf.length })
+  } catch { res.status(500).json({ error: 'chunk_append_failed' }) }
+})
+
+app.post('/api/fs/upload-chunk/finish', requireAuth, (req, res) => {
+  try {
+    const id = String(req.body.uploadId || '')
+    const name = String(req.body.name || '')
+    const dest = safeResolve(req.body.dest || '.', req.body.inst)
+    if (!id || !name) return res.status(400).json({ error: 'bad_request' })
+    const part = path.join(dataDir, 'uploads', id + '.part')
+    if (!fs.existsSync(part)) return res.status(400).json({ error: 'no_part' })
+    fse.ensureDirSync(dest)
+    const target = path.join(dest, name)
+    fse.moveSync(part, target, { overwrite: true })
+    audit(req.user.username, 'upload', { target })
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'chunk_finish_failed' }) }
+})
+
 app.post('/api/fs/mkdir', requireAuth, (req, res) => {
   try {
     const p = safeResolve(req.body.path, req.body.inst)
