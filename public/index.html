@@ -31,6 +31,7 @@
       <button data-tab="tasks">Tasks</button>
       <button data-tab="worlds">Worlds</button>
       <button data-tab="settings">Settings</button>
+      <button data-tab="updates">Updates</button>
       <button data-tab="metrics">Metrics</button>
       <button data-tab="terminal">Terminal</button>
     </nav>
@@ -56,6 +57,16 @@
             <h3>Logs</h3>
             <pre id="logsPreview"></pre>
           </div>
+        </div>
+      </section>
+      <section id="updates" class="tab hidden">
+        <div class="card">
+          <h3>Updates</h3>
+          <div class="row">
+            <button id="checkUpdatesTab">Check for Updates</button>
+            <button id="applyUpdateTab">Apply Update</button>
+          </div>
+          <pre id="updatesOutTab"></pre>
         </div>
       </section>
       <section id="console" class="tab hidden">
