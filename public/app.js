@@ -2,38 +2,39 @@ let token=null
 let ws=null
 function el(id){return document.getElementById(id)}
 function showTab(t){document.querySelectorAll('.tab').forEach(x=>{x.classList.remove('active');x.classList.add('hidden')});document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));const editor=el('editor');if(editor){editor.classList.add('hidden');document.body.classList.remove('modal-open')}const s=el(t);s.classList.remove('hidden');localStorage.setItem('activeTab',t);requestAnimationFrame(()=>{s.classList.add('active');if(t==='console'){const c=el('consoleOut');if(c)c.scrollTop=c.scrollHeight}})}
-document.addEventListener('DOMContentLoaded',()=>{connectWS();loadStatus();loadConsoleHistory();loadFiles('.');loadPlugins();loadBackups();loadTasks();loadWorlds();const t=localStorage.getItem('activeTab')||'dashboard';showTab(t);updateActiveHeader()})
+document.addEventListener('DOMContentLoaded',()=>{const qp=new URLSearchParams(location.search);activeInstance=qp.get('instance')||activeInstance;connectWS();loadStatus();loadConsoleHistory();loadFiles('.');loadPlugins();loadBackups();loadTasks();loadWorlds();const t=localStorage.getItem('activeTab')||'dashboard';showTab(t);updateActiveHeader()})
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab))
 if(el('logoutBtn')){el('logoutBtn').onclick=()=>{}}
 function updateActiveHeader(){const h=el('activeInstanceHeader');if(h)h.textContent='Active: '+(activeInstance||'(none)')}
 function auth(){return{}}
+function urlWithInst(u){if(!activeInstance) return u;return u+(u.includes('?')?'&':'?')+'name='+encodeURIComponent(activeInstance)}
 function apiFetch(url,opt){const o=opt||{};o.headers={...(o.headers||{}),...auth()};return fetch(url,o)}
 function apiUpload(url,fd,onp){return new Promise((resolve,reject)=>{const x=new XMLHttpRequest();x.open('POST',url);const h=auth();Object.keys(h).forEach(k=>x.setRequestHeader(k,h[k]));x.upload.onprogress=e=>{if(e.lengthComputable&&onp)onp(Math.round(e.loaded*100/e.total))};x.onload=()=>resolve({ok:x.status>=200&&x.status<300,status:x.status,body:x.responseText});x.onerror=()=>reject(new TypeError('network_error'));x.send(fd)})}
 let activeInstance=null
 function connectWS(){ws=new WebSocket(`ws://${location.host}`);ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='console'){const inst=m.payload.instance||null;if(!activeInstance||inst===activeInstance){appendConsole(m.payload.line)}}if(m.type==='status'){const inst=m.payload.instance||null;if(!inst||inst===activeInstance){updateStatus(m.payload.status||m.payload)}}if(m.type==='metrics'){const inst=m.payload.instance||null;if(!inst||inst===activeInstance){updateMetrics(m.payload.metrics||m.payload)}}if(m.type==='terminal'){appendTerminalLine(m.payload.line)}}}
 function updateStatus(s){el('statusText').textContent=`${s.online?'Online':'Offline'}${s.crashed?' (crashed)':''}`;const b=el('statusBar');b.textContent=el('statusText').textContent;b.className='status-pill '+(s.crashed?'status-crashed':(s.online?'status-online':'status-offline'))}
-async function loadStatus(){const r=await apiFetch('/api/status');const j=await r.json();activeInstance=j.instance||activeInstance;updateStatus(j.status);updateMetrics(j.metrics);updateActiveHeader()}
+async function loadStatus(){const r=await apiFetch(urlWithInst('/api/status'));const j=await r.json();activeInstance=j.instance||activeInstance;updateStatus(j.status);updateMetrics(j.metrics);updateActiveHeader()}
 function stripAnsi(s){return s.replace(/\x1b\[[0-9;]*m/g,'')}
 function classifySeverity(sev,line){const s=(sev||'').toLowerCase();const L=line||'';if(s.includes('error')||L.includes('ERROR'))return'log-error';if(s.includes('warn')||L.includes('WARN'))return'log-warn';if(s.includes('debug'))return'log-debug';if(s.includes('info'))return'log-info';if(L.includes('WRAPPER'))return'log-system';return'log-info'}
 function renderColoredLine(line,target){const clean=stripAnsi(line);const m=clean.match(/^\[(\d{2}:\d{2}:\d{2})] \[(.+?)\/(.+?)]:\s(.*)$/);const row=document.createElement('div');row.className='log-line';if(m){const ts=m[1],thread=m[2],sev=m[3],msg=m[4];row.classList.add(classifySeverity(sev,clean));const tsSpan=document.createElement('span');tsSpan.className='log-ts';tsSpan.textContent = `[${ts}]`;row.appendChild(tsSpan);const thSpan=document.createElement('span');thSpan.className='log-thread';thSpan.textContent = `[${thread}]`;row.appendChild(thSpan);const tag=document.createElement('span');const sevClass=classifySeverity(sev,clean);tag.className='log-tag'+(sevClass==='log-warn'?' warn':sevClass==='log-error'?' error':sevClass==='log-debug'?' debug':'');tag.textContent = sev.toUpperCase();row.appendChild(tag);const msgSpan=document.createElement('span');msgSpan.textContent = msg;row.appendChild(msgSpan)}else{row.classList.add(classifySeverity('',clean));const s=document.createElement('span');s.textContent = clean;row.appendChild(s)}target.appendChild(row);target.scrollTop=target.scrollHeight}
 function trimConsole(target){while(target.children.length>500){target.removeChild(target.firstChild)}}
 function appendConsole(line){const out=el('consoleOut');const prev=el('logsPreview');renderColoredLine(line,out);renderColoredLine(line,prev);trimConsole(out);trimConsole(prev)}
-el('sendCmd').onclick=async()=>{const cmd=el('consoleIn').value;if(!cmd)return;await apiFetch('/api/console',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:cmd})});el('consoleIn').value=''}
+el('sendCmd').onclick=async()=>{const cmd=el('consoleIn').value;if(!cmd)return;await apiFetch('/api/console',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:cmd,name:activeInstance})});el('consoleIn').value=''}
 el('consoleIn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();el('sendCmd').click()}})
 el('downloadLog').onclick=()=>{window.location='/api/logs/latest'}
 el('consoleJumpLast').onclick=()=>{const c=el('consoleOut');if(c)c.scrollTop=c.scrollHeight}
-el('consoleStart').onclick=()=>apiFetch('/api/start',{method:'POST'})
-el('consoleStop').onclick=()=>apiFetch('/api/stop',{method:'POST'})
-el('consoleKill').onclick=()=>apiFetch('/api/kill',{method:'POST'})
+el('consoleStart').onclick=()=>apiFetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:activeInstance})})
+el('consoleStop').onclick=()=>apiFetch('/api/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:activeInstance})})
+el('consoleKill').onclick=()=>apiFetch('/api/kill',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:activeInstance})})
 el('startBtn').onclick=()=>apiFetch('/api/start',{method:'POST'})
 el('stopBtn').onclick=()=>apiFetch('/api/stop',{method:'POST'})
 el('killBtn').onclick=()=>apiFetch('/api/kill',{method:'POST'})
-async function loadConsoleTail(){const r=await apiFetch('/api/console/tail');const j=await r.json();j.lines.forEach(appendConsole)}
-async function loadConsoleHistory(){const r=await apiFetch('/api/console/history?lines=500');if(r.ok){const j=await r.json();el('consoleOut').innerHTML='';el('logsPreview').innerHTML='';j.lines.forEach(appendConsole);const c=el('consoleOut');c.scrollTop=c.scrollHeight} else {await loadConsoleTail()}}
+async function loadConsoleTail(){const r=await apiFetch(urlWithInst('/api/console/tail'));const j=await r.json();j.lines.forEach(appendConsole)}
+async function loadConsoleHistory(){const r=await apiFetch(urlWithInst('/api/console/history?lines=500'));if(r.ok){const j=await r.json();el('consoleOut').innerHTML='';el('logsPreview').innerHTML='';j.lines.forEach(appendConsole);const c=el('consoleOut');c.scrollTop=c.scrollHeight} else {await loadConsoleTail()}}
 async function loadFiles(p){
   showLoading()
   el('pathInput').value=p;
-  const r=await apiFetch('/api/fs/list?path='+encodeURIComponent(p));
+  const r=await apiFetch(urlWithInst('/api/fs/list?path='+encodeURIComponent(p)));
   if(!r.ok){hideLoading();return}
   const j=await r.json();
   const t=el('fileTable');
@@ -51,11 +52,11 @@ async function loadFiles(p){
     const tdT=document.createElement('td');tdT.textContent=e.isDir?'Folder':'File';tdT.className=e.isDir?'type-dir':'type-file';
     const tdS=document.createElement('td');tdS.textContent=e.size;
     const tdA=document.createElement('td');
-  const dl=document.createElement('button');dl.className=e.isDir?'btn-dir':'btn-file';dl.textContent='Download';dl.onclick=()=>{const target=pathJoin(p,e.name);const url=e.isDir?('/api/fs/download-zip?path='+encodeURIComponent(target)):('/api/fs/download?path='+encodeURIComponent(target));window.location=url};tdA.appendChild(dl);
+  const dl=document.createElement('button');dl.className=e.isDir?'btn-dir':'btn-file';dl.textContent='Download';dl.onclick=()=>{const target=pathJoin(p,e.name);const url=e.isDir?('/api/fs/download-zip?path='+encodeURIComponent(target)):('/api/fs/download?path='+encodeURIComponent(target));window.location=urlWithInst(url)};tdA.appendChild(dl);
   if(!e.isDir && e.name.toLowerCase().endsWith('.zip')){const uz=document.createElement('button');uz.className='btn-file';uz.textContent='Unzip';uz.onclick=async()=>{const ok=confirm('Unzip this archive here?');if(!ok)return;const body={path:pathJoin(p,e.name),dest:p};let r=await apiFetch('/api/fs/unzip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){r=await apiFetch('/api/fs/unzip?path='+encodeURIComponent(body.path)+'&dest='+encodeURIComponent(body.dest))}if(r.ok){alert('Unzipped');loadFiles(p)}else{alert('Unzip failed')}};tdA.appendChild(uz)}
   if(!e.isDir && isEditable(e.name)){const ed=document.createElement('button');ed.className='btn-file';ed.textContent='Edit';ed.onclick=()=>openEditor(pathJoin(p,e.name));tdA.appendChild(ed)}
-  const rn=document.createElement('button');rn.className=e.isDir?'btn-dir':'btn-file';rn.textContent='Rename';rn.onclick=async()=>{const newName=prompt('New name',e.name);if(!newName||newName===e.name)return;await apiFetch('/api/fs/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:pathJoin(p,e.name),to:pathJoin(p,newName)})});loadFiles(p);if(p==='plugins'||p.startsWith('plugins/'))loadPlugins()};tdA.appendChild(rn);
-  const rm=document.createElement('button');rm.className=e.isDir?'btn-dir':'btn-file';rm.textContent='Delete';rm.onclick=async()=>{const target=pathJoin(p,e.name);const ok=await showConfirm(`Delete this ${e.isDir?'folder':'file'}?`);if(!ok)return;await apiFetch('/api/fs/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:target})});loadFiles(p);if(target.startsWith('plugins/'))loadPlugins()};tdA.appendChild(rm);
+  const rn=document.createElement('button');rn.className=e.isDir?'btn-dir':'btn-file';rn.textContent='Rename';rn.onclick=async()=>{const newName=prompt('New name',e.name);if(!newName||newName===e.name)return;await apiFetch('/api/fs/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:pathJoin(p,e.name),to:pathJoin(p,newName),inst:activeInstance})});loadFiles(p);if(p==='plugins'||p.startsWith('plugins/'))loadPlugins()};tdA.appendChild(rn);
+  const rm=document.createElement('button');rm.className=e.isDir?'btn-dir':'btn-file';rm.textContent='Delete';rm.onclick=async()=>{const target=pathJoin(p,e.name);const ok=await showConfirm(`Delete this ${e.isDir?'folder':'file'}?`);if(!ok)return;await apiFetch('/api/fs/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:target,inst:activeInstance})});loadFiles(p);if(target.startsWith('plugins/'))loadPlugins()};tdA.appendChild(rm);
     tr.appendChild(tdSel);tr.appendChild(tdN);tr.appendChild(tdT);tr.appendChild(tdS);tr.appendChild(tdA);
     t.appendChild(tr)
   })
@@ -74,13 +75,13 @@ el('browseBtn').onclick=()=>{filesHistory.push(el('pathInput').value);origBrowse
 el('selectAllFiles').onclick=()=>{const t=el('fileTable');const p=el('pathInput').value;const rows=[...t.querySelectorAll('tr')].slice(1);rows.forEach(tr=>{const cb=tr.querySelector('input[type="checkbox"]');const a=tr.querySelector('td:nth-child(2) a');const name=a?a.textContent.trim():'';if(cb&&name){cb.checked=true;selectedFiles.add(pathJoin(p,name))}})}
 const editableExt=['.yml','.yaml','.json','.properties','.txt','.cfg','.ini','.md','.config','.confi','.conf','.key']
 function isEditable(name){const i=name.lastIndexOf('.');if(i<0)return false;const ext=name.slice(i).toLowerCase();return editableExt.includes(ext)}
-function openEditor(fullPath){el('editorPath').textContent=fullPath;document.body.classList.add('modal-open');el('editor').classList.remove('hidden');apiFetch('/api/fs/read?path='+encodeURIComponent(fullPath)).then(r=>r.json()).then(j=>{el('editorContent').value=j.content})}
+function openEditor(fullPath){el('editorPath').textContent=fullPath;document.body.classList.add('modal-open');el('editor').classList.remove('hidden');apiFetch(urlWithInst('/api/fs/read?path='+encodeURIComponent(fullPath))).then(r=>r.json()).then(j=>{el('editorContent').value=j.content})}
 el('editorClose').onclick=()=>{document.body.classList.remove('modal-open');el('editor').classList.add('hidden')}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!el('editor').classList.contains('hidden')){el('editorClose').click()}}})
 el('editor').addEventListener('click',e=>{if(e.target.id==='editor'){el('editorClose').click()}})
-el('editorSave').onclick=async()=>{const p=el('editorPath').textContent;const c=el('editorContent').value;const r=await apiFetch('/api/fs/write',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:p,content:c})});if(r.ok){const cur=el('pathInput').value;document.body.classList.remove('modal-open');el('editor').classList.add('hidden');loadFiles(cur)}else{alert('Save failed')}}
+el('editorSave').onclick=async()=>{const p=el('editorPath').textContent;const c=el('editorContent').value;const r=await apiFetch('/api/fs/write',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:p,content:c,inst:activeInstance})});if(r.ok){const cur=el('pathInput').value;document.body.classList.remove('modal-open');el('editor').classList.add('hidden');loadFiles(cur)}else{alert('Save failed')}}
 el('browseBtn').onclick=()=>navigateTo(el('pathInput').value)
-el('uploadBtn').onclick=async()=>{const files=el('uploadFile').files;if(!files||files.length===0)return;const p=el('pathInput').value;const fd=new FormData();for(const f of files){fd.append('files',f)}fd.append('dest',p);const box=el('fileUploadProgress');const bar=el('fileUploadBar');const txt=el('fileUploadText');box.classList.remove('hidden');bar.style.setProperty('--w','0%');txt.textContent='0%';el('uploadBtn').disabled=true;el('uploadFile').disabled=true;try{const r=await apiUpload('/api/fs/upload-multi',fd,(pct)=>{bar.style.setProperty('--w',pct+'%');txt.textContent=pct+'%'});el('uploadFile').value='';loadFiles(p)}catch(e){}finally{el('uploadBtn').disabled=false;el('uploadFile').disabled=false;bar.style.setProperty('--w','0%');txt.textContent='';box.classList.add('hidden')}}
+el('uploadBtn').onclick=async()=>{const files=el('uploadFile').files;if(!files||files.length===0)return;const p=el('pathInput').value;const fd=new FormData();for(const f of files){fd.append('files',f)}fd.append('dest',p);const box=el('fileUploadProgress');const bar=el('fileUploadBar');const txt=el('fileUploadText');box.classList.remove('hidden');bar.style.setProperty('--w','0%');txt.textContent='0%';el('uploadBtn').disabled=true;el('uploadFile').disabled=true;try{const r=await apiUpload(urlWithInst('/api/fs/upload-multi'),fd,(pct)=>{bar.style.setProperty('--w',pct+'%');txt.textContent=pct+'%'});el('uploadFile').value='';loadFiles(p)}catch(e){try{for(const f of files){const fd1=new FormData();fd1.append('file',f);fd1.append('dest',p);await apiUpload(urlWithInst('/api/fs/upload'),fd1)}el('uploadFile').value='';loadFiles(p)}catch(e2){alert('Upload failed')}}finally{el('uploadBtn').disabled=false;el('uploadFile').disabled=false;bar.style.setProperty('--w','0%');txt.textContent='';box.classList.add('hidden')}}
 // Confirmation modal helpers
 let __confirmResolve=null
 function showConfirm(msg){el('confirmText').textContent=msg;document.body.classList.add('modal-open');el('confirm').classList.remove('hidden');return new Promise((resolve)=>{__confirmResolve=resolve})}
@@ -89,7 +90,7 @@ if(el('confirmYes')) el('confirmYes').onclick=()=>hideConfirm(true)
 if(el('confirmNo')) el('confirmNo').onclick=()=>hideConfirm(false)
 async function loadPlugins(){
   showLoading()
-  const r=await apiFetch('/api/plugins');
+  const r=await apiFetch(urlWithInst('/api/plugins'));
   const j=await r.json();
   const t=el('pluginTable');
   t.innerHTML='<tr><th><input type="checkbox" id="pluginsSelectAllCb" /></th><th>Name</th><th>Actions</th></tr>';
@@ -99,8 +100,8 @@ async function loadPlugins(){
     const tdSel=document.createElement('td');const cb=document.createElement('input');cb.type='checkbox';cb.onchange=()=>{if(cb.checked)selectedPlugins.add(p.name);else selectedPlugins.delete(p.name);updatePluginsSelectAllState()};tdSel.appendChild(cb);
     const tdN=document.createElement('td');tdN.textContent=p.name;
     const tdA=document.createElement('td');
-    const rn=document.createElement('button');rn.textContent='Rename';rn.onclick=async()=>{const newName=prompt('New name',p.name);if(!newName||newName===p.name)return;await apiFetch('/api/fs/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:'plugins/'+p.name,to:'plugins/'+newName})});loadPlugins()};tdA.appendChild(rn);
-    const del=document.createElement('button');del.textContent='Delete';del.onclick=async()=>{const ok=await showConfirm('Delete this plugin?');if(!ok)return;await apiFetch('/api/plugins/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:p.name})});loadPlugins()};tdA.appendChild(del);
+    const rn=document.createElement('button');rn.textContent='Rename';rn.onclick=async()=>{const newName=prompt('New name',p.name);if(!newName||newName===p.name)return;await apiFetch('/api/fs/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:'plugins/'+p.name,to:'plugins/'+newName,inst:activeInstance})});loadPlugins()};tdA.appendChild(rn);
+    const del=document.createElement('button');del.textContent='Delete';del.onclick=async()=>{const ok=await showConfirm('Delete this plugin?');if(!ok)return;await apiFetch('/api/plugins/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:p.name,inst:activeInstance})});loadPlugins()};tdA.appendChild(del);
     tr.appendChild(tdSel);tr.appendChild(tdN);tr.appendChild(tdA);
     t.appendChild(tr)
   })

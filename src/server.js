@@ -111,9 +111,19 @@ function appendTerminal(line) {
   broadcast('terminal', { line })
 }
 
-function safeResolve(p) {
-  const abs = path.resolve(cfg.instanceRoot, p || '.')
-  if (!abs.startsWith(path.resolve(cfg.instanceRoot))) throw new Error('Invalid path')
+function rootForInstance(name){
+  try {
+    if (name) {
+      const dir = path.join(instancesDir, sanitizeName(name))
+      if (fs.existsSync(dir)) return path.resolve(dir)
+    }
+  } catch {}
+  return path.resolve(cfg.instanceRoot)
+}
+function safeResolve(p, inst) {
+  const base = rootForInstance(inst)
+  const abs = path.resolve(base, p || '.')
+  if (!abs.startsWith(base)) throw new Error('Invalid path')
   return abs
 }
 
@@ -345,22 +355,22 @@ const upload = multer({ dest: path.join(dataDir, 'uploads') })
 
 app.get('/api/fs/list', requireAuth, (req, res) => {
   try {
-    const root = safeResolve(req.query.path || '.')
+    const root = safeResolve(req.query.path || '.', req.query.inst)
     const entries = fs.readdirSync(root, { withFileTypes: true }).map(e => ({ name: e.name, isDir: e.isDirectory(), size: e.isDirectory() ? 0 : fs.statSync(path.join(root, e.name)).size }))
-    res.json({ path: path.relative(path.resolve(cfg.instanceRoot), root), entries })
+    res.json({ path: path.relative(rootForInstance(req.query.inst), root), entries })
   } catch (e) { res.status(400).json({ error: 'bad_path' }) }
 })
 
 app.get('/api/fs/download', requireAuth, (req, res) => {
   try {
-    const p = safeResolve(req.query.path)
+    const p = safeResolve(req.query.path, req.query.inst)
     res.download(p)
   } catch { res.status(400).json({ error: 'bad_path' }) }
 })
 
 app.get('/api/fs/download-zip', requireAuth, (req, res) => {
   try {
-    const root = safeResolve(req.query.path || '.')
+    const root = safeResolve(req.query.path || '.', req.query.inst)
     const st = fs.statSync(root)
     const name = path.basename(root) + '.zip'
     res.setHeader('Content-Type', 'application/zip')
@@ -386,7 +396,7 @@ app.post('/api/fs/download-zip-multi', requireAuth, (req, res) => {
     archive.pipe(res)
     for (const rel of paths) {
       try {
-        const p = safeResolve(rel)
+        const p = safeResolve(rel, req.body.inst)
         const st = fs.statSync(p)
         const base = path.basename(p)
         if (st.isDirectory()) archive.directory(p, base)
@@ -401,20 +411,20 @@ app.post('/api/fs/download-zip-multi', requireAuth, (req, res) => {
 const editableExt = new Set(['.yml','.yaml','.json','.properties','.txt','.cfg','.ini','.md','.config','.confi','.conf'])
 app.get('/api/fs/read', requireAuth, (req, res) => {
   try {
-    const p = safeResolve(req.query.path)
+    const p = safeResolve(req.query.path, req.query.inst)
     const ext = path.extname(p).toLowerCase()
     if (!editableExt.has(ext)) return res.status(400).json({ error: 'not_editable' })
     if (ext === '.jar') return res.status(400).json({ error: 'not_editable' })
     const st = fs.statSync(p)
     if (st.size > 5 * 1024 * 1024) return res.status(413).json({ error: 'too_large' })
     const content = fs.readFileSync(p, 'utf8')
-    res.json({ path: path.relative(path.resolve(cfg.instanceRoot), p), size: st.size, content })
+    res.json({ path: path.relative(rootForInstance(req.query.inst), p), size: st.size, content })
   } catch { res.status(400).json({ error: 'bad_path' }) }
 })
 
 app.post('/api/fs/write', requireAuth, (req, res) => {
   try {
-    const p = safeResolve(req.body.path)
+    const p = safeResolve(req.body.path, req.body.inst)
     const ext = path.extname(p).toLowerCase()
     if (!editableExt.has(ext)) return res.status(400).json({ error: 'not_editable' })
     if (ext === '.jar') return res.status(400).json({ error: 'not_editable' })
@@ -427,7 +437,7 @@ app.post('/api/fs/write', requireAuth, (req, res) => {
 
 app.post('/api/fs/upload', requireAuth, upload.single('file'), (req, res) => {
   try {
-    const dest = safeResolve(req.body.dest || '.')
+    const dest = safeResolve(req.body.dest || '.', req.body.inst)
     fse.ensureDirSync(dest)
     if (!req.file) return res.status(400).json({ error: 'no_file' })
     const target = path.join(dest, req.file.originalname)
@@ -439,7 +449,7 @@ app.post('/api/fs/upload', requireAuth, upload.single('file'), (req, res) => {
 
 app.post('/api/fs/upload-multi', requireAuth, upload.array('files'), (req, res) => {
   try {
-    const dest = safeResolve(req.body.dest || '.')
+    const dest = safeResolve(req.body.dest || '.', req.body.inst)
     fse.ensureDirSync(dest)
     const saved = []
     for (const f of req.files || []) {
@@ -454,7 +464,7 @@ app.post('/api/fs/upload-multi', requireAuth, upload.array('files'), (req, res) 
 
 app.post('/api/fs/mkdir', requireAuth, (req, res) => {
   try {
-    const p = safeResolve(req.body.path)
+    const p = safeResolve(req.body.path, req.body.inst)
     fse.ensureDirSync(p)
     audit(req.user.username, 'mkdir', { path: p })
     res.json({ ok: true })
@@ -463,8 +473,8 @@ app.post('/api/fs/mkdir', requireAuth, (req, res) => {
 
 app.post('/api/fs/rename', requireAuth, (req, res) => {
   try {
-    const from = safeResolve(req.body.from)
-    const to = safeResolve(req.body.to)
+    const from = safeResolve(req.body.from, req.body.inst)
+    const to = safeResolve(req.body.to, req.body.inst)
     fse.moveSync(from, to, { overwrite: true })
     audit(req.user.username, 'rename', { from, to })
     res.json({ ok: true })
@@ -473,7 +483,7 @@ app.post('/api/fs/rename', requireAuth, (req, res) => {
 
 app.post('/api/fs/delete', requireAuth, (req, res) => {
   try {
-    const p = safeResolve(req.body.path)
+    const p = safeResolve(req.body.path, req.body.inst)
     fse.removeSync(p)
     audit(req.user.username, 'delete', { path: p })
     res.json({ ok: true })
@@ -482,8 +492,8 @@ app.post('/api/fs/delete', requireAuth, (req, res) => {
 
 app.post('/api/fs/unzip', requireAuth, (req, res) => {
   try {
-    const src = safeResolve(req.body.path)
-    const dest = safeResolve(req.body.dest || '.')
+    const src = safeResolve(req.body.path, req.body.inst)
+    const dest = safeResolve(req.body.dest || '.', req.body.inst)
     if (!fs.existsSync(src) || !src.toLowerCase().endsWith('.zip')) return res.status(400).json({ error: 'not_zip' })
     fse.ensureDirSync(dest)
     const zip = new AdmZip(src)
@@ -495,8 +505,8 @@ app.post('/api/fs/unzip', requireAuth, (req, res) => {
 
 app.get('/api/fs/unzip', requireAuth, (req, res) => {
   try {
-    const src = safeResolve(req.query.path)
-    const dest = safeResolve(req.query.dest || '.')
+    const src = safeResolve(req.query.path, req.query.inst)
+    const dest = safeResolve(req.query.dest || '.', req.query.inst)
     if (!fs.existsSync(src) || !src.toLowerCase().endsWith('.zip')) return res.status(400).json({ error: 'not_zip' })
     fse.ensureDirSync(dest)
     const zip = new AdmZip(src)
@@ -616,7 +626,7 @@ app.get('/api/update/apply', requireAuth, (req, res) => {
 
 app.get('/api/plugins', requireAuth, (req, res) => {
   try {
-    const dir = safeResolve('plugins')
+    const dir = safeResolve('plugins', req.query.inst)
     fse.ensureDirSync(dir)
     const list = fs.readdirSync(dir).filter(n => n.endsWith('.jar')).map(n => ({ name: n }))
     res.json({ plugins: list })
@@ -625,7 +635,7 @@ app.get('/api/plugins', requireAuth, (req, res) => {
 
 app.post('/api/plugins/upload', requireAuth, upload.single('file'), (req, res) => {
   try {
-    const dir = safeResolve('plugins')
+    const dir = safeResolve('plugins', req.body.inst)
     fse.ensureDirSync(dir)
     const target = path.join(dir, req.file.originalname)
     fse.moveSync(req.file.path, target, { overwrite: true })
@@ -636,7 +646,7 @@ app.post('/api/plugins/upload', requireAuth, upload.single('file'), (req, res) =
 
 app.post('/api/plugins/upload-multi', requireAuth, upload.array('files'), (req, res) => {
   try {
-    const dir = safeResolve('plugins')
+    const dir = safeResolve('plugins', req.body.inst)
     fse.ensureDirSync(dir)
     const saved = []
     for (const f of req.files || []) {
@@ -651,7 +661,7 @@ app.post('/api/plugins/upload-multi', requireAuth, upload.array('files'), (req, 
 
 app.post('/api/plugins/delete', requireAuth, (req, res) => {
   try {
-    const dir = safeResolve('plugins')
+    const dir = safeResolve('plugins', req.body.inst)
     const target = path.join(dir, req.body.name)
     fse.removeSync(target)
     audit(req.user.username, 'plugin_delete', { target })
