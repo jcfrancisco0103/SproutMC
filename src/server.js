@@ -712,16 +712,24 @@ app.post('/api/update/apply', requireAuth, (req, res) => {
       p.on('error', () => resolve({ code: 1 }))
       p.on('close', code => resolve({ code }))
     })
+    const cleanup = async () => {
+      try { await run('git', ['config','advice.diverging','false']) } catch {}
+      try { await run('git', ['config','pull.rebase','false']) } catch {}
+      try { await run('git', ['gc','--prune=now']) } catch {}
+      try { await run('git', ['prune']) } catch {}
+      try { const p = path.join(process.cwd(), '.git', 'gc.log'); if (fs.existsSync(p)) fse.removeSync(p) } catch {}
+    }
     ;(async () => {
       await run('git', ['fetch','--depth=1','--no-tags','--prune','origin','main'])
       const pull = await run('git', ['pull','--ff-only','origin','main'])
-      if (pull.code === 0) { audit(req.user.username, 'update_apply', {}); return res.json({ ok: true, output: out }) }
+      if (pull.code === 0) { await cleanup(); audit(req.user.username, 'update_apply', {}); return res.json({ ok: true, output: out }) }
       await run('git', ['stash','push','-u','-m', stashMsg])
       await run('git', ['fetch','--depth=1','--no-tags','--prune','origin','main'])
       const reset = await run('git', ['reset','--hard','origin/main'])
       if (reset.code !== 0) return res.status(500).json({ error: 'update_failed', output: out })
+      await cleanup()
       audit(req.user.username, 'update_apply', { mode: 'reset_hard', stash: stashMsg })
-      res.json({ ok: true, output: out + `\nApplied with hard reset to origin/main. Local changes stashed as ${stashMsg}.` })
+      res.json({ ok: true, output: out + `\nApplied with hard reset to origin/main. Local changes stashed as ${stashMsg}.\nRepository cleaned (gc/prune); warnings suppressed.` })
     })()
   } catch { res.status(500).json({ error: 'update_failed' }) }
 })
@@ -737,16 +745,24 @@ app.get('/api/update/apply', requireAuth, (req, res) => {
       p.on('error', () => resolve({ code: 1 }))
       p.on('close', code => resolve({ code }))
     })
+    const cleanup = async () => {
+      try { await run('git', ['config','advice.diverging','false']) } catch {}
+      try { await run('git', ['config','pull.rebase','false']) } catch {}
+      try { await run('git', ['gc','--prune=now']) } catch {}
+      try { await run('git', ['prune']) } catch {}
+      try { const p = path.join(process.cwd(), '.git', 'gc.log'); if (fs.existsSync(p)) fse.removeSync(p) } catch {}
+    }
     ;(async () => {
       await run('git', ['fetch','--depth=1','--no-tags','--prune','origin','main'])
       const pull = await run('git', ['pull','--ff-only','origin','main'])
-      if (pull.code === 0) { audit(req.user.username, 'update_apply', {}); return res.json({ ok: true, output: out }) }
+      if (pull.code === 0) { await cleanup(); audit(req.user.username, 'update_apply', {}); return res.json({ ok: true, output: out }) }
       await run('git', ['stash','push','-u','-m', stashMsg])
       await run('git', ['fetch','--depth=1','--no-tags','--prune','origin','main'])
       const reset = await run('git', ['reset','--hard','origin/main'])
       if (reset.code !== 0) return res.status(500).json({ error: 'update_failed', output: out })
+      await cleanup()
       audit(req.user.username, 'update_apply', { mode: 'reset_hard', stash: stashMsg })
-      res.json({ ok: true, output: out + `\nApplied with hard reset to origin/main. Local changes stashed as ${stashMsg}.` })
+      res.json({ ok: true, output: out + `\nApplied with hard reset to origin/main. Local changes stashed as ${stashMsg}.\nRepository cleaned (gc/prune); warnings suppressed.` })
     })()
   } catch { res.status(500).json({ error: 'update_failed' }) }
 })
