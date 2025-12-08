@@ -1,1 +1,3 @@
 instances/
+logs/
+*.log
