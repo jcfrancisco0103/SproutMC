@@ -504,7 +504,7 @@ app.post('/api/fs/upload-chunk/append', requireAuth, upload.single('chunk'), (re
   } catch { res.status(500).json({ error: 'chunk_append_failed' }) }
 })
 
-app.post('/api/fs/upload-chunk/append-raw', requireAuth, express.raw({ type: 'application/octet-stream', limit: '100mb' }), (req, res) => {
+app.post('/api/fs/upload-chunk/append-raw', requireAuth, express.raw({ type: 'application/octet-stream', limit: '100gb' }), (req, res) => {
   try {
     const id = String((req.query || {}).uploadId || '')
     if (!id) return res.status(400).json({ error: 'no_upload_id' })
