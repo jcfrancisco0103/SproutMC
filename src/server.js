@@ -21,7 +21,7 @@ const server = http.createServer(app)
 const wss = new WebSocket.Server({ server })
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
-app.use(express.static(path.resolve('public')))
+app.use(express.static(path.resolve('public'), { maxAge: '1h', etag: true }))
 
 const dataDir = path.resolve('data')
 const logsDir = path.resolve('logs')
@@ -44,7 +44,9 @@ let wsClients = new Set()
 let backoffSeconds = 1
 let lastLogKey = null
 let currentLogStream = null
-let metricsCache = { cpu: null, memory: null, diskUsedBytes: null, tps: null, players: { count: 0, list: [] } }
+let metricsCache = { cpu: null, memory: null, diskUsedBytes: null, tps: null, players: { count: 0, list: [] }, systemMemoryTotal: null, systemMemoryFree: null }
+let diskSizeLastTs = 0
+let diskSizeComputing = false
 const playersOnline = new Set()
 let restartPending = false
 let terminalBuffer = []
@@ -242,14 +244,25 @@ async function updateMetrics() {
       metricsCache.cpu = 0
       metricsCache.memory = 0
     }
-    metricsCache.diskUsedBytes = await computeFolderSize(path.resolve(cfg.instanceRoot))
+    const now = Date.now()
+    if (!diskSizeComputing && (now - diskSizeLastTs > 60_000 || metricsCache.diskUsedBytes == null)) {
+      diskSizeComputing = true
+      setImmediate(async () => {
+        try {
+          const size = await computeFolderSize(path.resolve(cfg.instanceRoot))
+          metricsCache.diskUsedBytes = size
+          diskSizeLastTs = Date.now()
+        } catch {}
+        finally { diskSizeComputing = false }
+      })
+    }
     metricsCache.systemMemoryTotal = os.totalmem()
     metricsCache.systemMemoryFree = os.freemem()
   } catch {}
   broadcast('metrics', { instance: activeInstanceName()||'root', metrics: metricsCache })
 }
 
-setInterval(updateMetrics, 5000)
+setInterval(updateMetrics, 10000)
 
 function requireAuth(req, res, next) {
   req.user = { username: 'system' }
@@ -356,7 +369,9 @@ const upload = multer({ dest: path.join(dataDir, 'uploads') })
 app.get('/api/fs/list', requireAuth, (req, res) => {
   try {
     const root = safeResolve(req.query.path || '.', req.query.inst)
-    const entries = fs.readdirSync(root, { withFileTypes: true }).map(e => ({ name: e.name, isDir: e.isDirectory(), size: e.isDirectory() ? 0 : fs.statSync(path.join(root, e.name)).size }))
+    const dirents = fs.readdirSync(root, { withFileTypes: true })
+    const many = dirents.length > 200
+    const entries = dirents.map(e => ({ name: e.name, isDir: e.isDirectory(), size: (e.isDirectory() || many) ? 0 : fs.statSync(path.join(root, e.name)).size }))
     res.json({ path: path.relative(rootForInstance(req.query.inst), root), entries })
   } catch (e) { res.status(400).json({ error: 'bad_path' }) }
 })
