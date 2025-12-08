@@ -703,37 +703,51 @@ app.get('/api/update/check', requireAuth, (req, res) => {
 
 app.post('/api/update/apply', requireAuth, (req, res) => {
   try {
-    const steps = [ ['git',['fetch','--depth=1','--no-tags','--prune','origin','main']], ['git',['pull','--ff-only','origin','main']] ]
-    let idx = 0
+    const stashMsg = `sproutmc-update-${Date.now()}`
     let out = ''
-    const runNext = () => {
-      if (idx >= steps.length) { audit(req.user.username, 'update_apply', {}); return res.json({ ok: true, output: out }) }
-      const [exe,args] = steps[idx++]
+    const run = (exe, args) => new Promise((resolve) => {
       const p = child_process.spawn(exe, args, { cwd: process.cwd() })
       p.stdout.on('data', d => { out += d.toString() })
       p.stderr.on('data', d => { out += d.toString() })
-      p.on('error', () => { res.status(500).json({ error: 'update_failed', output: out }) })
-      p.on('close', code => { if (code !== 0) return res.status(500).json({ error: 'update_failed', exitCode: code, output: out }); runNext() })
-    }
-    runNext()
+      p.on('error', () => resolve({ code: 1 }))
+      p.on('close', code => resolve({ code }))
+    })
+    ;(async () => {
+      await run('git', ['fetch','--depth=1','--no-tags','--prune','origin','main'])
+      const pull = await run('git', ['pull','--ff-only','origin','main'])
+      if (pull.code === 0) { audit(req.user.username, 'update_apply', {}); return res.json({ ok: true, output: out }) }
+      await run('git', ['stash','push','-u','-m', stashMsg])
+      await run('git', ['fetch','--depth=1','--no-tags','--prune','origin','main'])
+      const reset = await run('git', ['reset','--hard','origin/main'])
+      if (reset.code !== 0) return res.status(500).json({ error: 'update_failed', output: out })
+      audit(req.user.username, 'update_apply', { mode: 'reset_hard', stash: stashMsg })
+      res.json({ ok: true, output: out + `\nApplied with hard reset to origin/main. Local changes stashed as ${stashMsg}.` })
+    })()
   } catch { res.status(500).json({ error: 'update_failed' }) }
 })
 
 app.get('/api/update/apply', requireAuth, (req, res) => {
   try {
-    const steps = [ ['git',['fetch','--depth=1','--no-tags','--prune','origin','main']], ['git',['pull','--ff-only','origin','main']] ]
-    let idx = 0
+    const stashMsg = `sproutmc-update-${Date.now()}`
     let out = ''
-    const runNext = () => {
-      if (idx >= steps.length) { audit(req.user.username, 'update_apply', {}); return res.json({ ok: true, output: out }) }
-      const [exe,args] = steps[idx++]
+    const run = (exe, args) => new Promise((resolve) => {
       const p = child_process.spawn(exe, args, { cwd: process.cwd() })
       p.stdout.on('data', d => { out += d.toString() })
       p.stderr.on('data', d => { out += d.toString() })
-      p.on('error', () => { res.status(500).json({ error: 'update_failed', output: out }) })
-      p.on('close', code => { if (code !== 0) return res.status(500).json({ error: 'update_failed', exitCode: code, output: out }); runNext() })
-    }
-    runNext()
+      p.on('error', () => resolve({ code: 1 }))
+      p.on('close', code => resolve({ code }))
+    })
+    ;(async () => {
+      await run('git', ['fetch','--depth=1','--no-tags','--prune','origin','main'])
+      const pull = await run('git', ['pull','--ff-only','origin','main'])
+      if (pull.code === 0) { audit(req.user.username, 'update_apply', {}); return res.json({ ok: true, output: out }) }
+      await run('git', ['stash','push','-u','-m', stashMsg])
+      await run('git', ['fetch','--depth=1','--no-tags','--prune','origin','main'])
+      const reset = await run('git', ['reset','--hard','origin/main'])
+      if (reset.code !== 0) return res.status(500).json({ error: 'update_failed', output: out })
+      audit(req.user.username, 'update_apply', { mode: 'reset_hard', stash: stashMsg })
+      res.json({ ok: true, output: out + `\nApplied with hard reset to origin/main. Local changes stashed as ${stashMsg}.` })
+    })()
   } catch { res.status(500).json({ error: 'update_failed' }) }
 })
 
