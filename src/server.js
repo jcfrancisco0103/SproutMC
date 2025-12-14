@@ -535,6 +535,29 @@ app.post('/api/fs/upload-chunk/finish', requireAuth, (req, res) => {
   } catch { res.status(500).json({ error: 'chunk_finish_failed' }) }
 })
 
+app.post('/api/fs/upload-chunk/finish-multi', requireAuth, (req, res) => {
+  try {
+    const id = String(req.body.uploadId || '')
+    const name = String(req.body.name || '')
+    const destRel = String(req.body.dest || '.')
+    const insts = Array.isArray(req.body.insts) ? req.body.insts.map(sanitizeName).filter(Boolean) : []
+    if (!id || !name || !insts.length) return res.status(400).json({ error: 'bad_request' })
+    const part = path.join(dataDir, 'uploads', id + '.part')
+    if (!fs.existsSync(part)) return res.status(400).json({ error: 'no_part' })
+    for (const inst of insts) {
+      try {
+        const dest = safeResolve(destRel, inst)
+        fse.ensureDirSync(dest)
+        const target = path.join(dest, name)
+        fs.copyFileSync(part, target)
+        audit(req.user.username, 'upload_multi', { target, instance: inst })
+      } catch {}
+    }
+    try { fse.removeSync(part) } catch {}
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'chunk_finish_failed' }) }
+})
+
 app.post('/api/fs/mkdir', requireAuth, (req, res) => {
   try {
     const p = safeResolve(req.body.path, req.body.inst)

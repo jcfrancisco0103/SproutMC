@@ -93,6 +93,8 @@
           <button id="backBtn">Back</button>
           <input type="file" id="uploadFile" multiple />
           <button id="uploadBtn">Upload</button>
+          <button id="uploadTargetsBtn">Select Servers</button>
+          <span id="uploadTargetsSummary"></span>
           <button id="selectAllFiles">Select All</button>
           <button id="downloadSelected">Download Selected</button>
           <button id="deleteSelected">Delete Selected</button>
@@ -226,6 +228,20 @@
           <button id="confirmYes" class="btn-danger">Delete</button>
           <button id="confirmNo">Cancel</button>
         </div>
+      </div>
+    </div>
+  </div>
+  <div id="uploadTargetsModal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="row">
+        <h3>Select Servers</h3>
+        <div style="flex:1"></div>
+        <button id="uploadTargetsClose">Close</button>
+      </div>
+      <div id="uploadTargetsList"></div>
+      <div class="row">
+        <button id="uploadTargetsSave" class="btn-accent">Save</button>
+        <button id="uploadTargetsClear">Clear</button>
       </div>
     </div>
   </div>
