@@ -16,6 +16,15 @@ const cron = require('node-cron')
 const https = require('https')
 
 const cfg = JSON.parse(fs.readFileSync(path.resolve('config.json'), 'utf8'))
+// Backwards-compatible normalization: ensure auth.users exists
+if (cfg && cfg.auth) {
+  if (!cfg.auth.users && cfg.auth.username && cfg.auth.passwordHash) {
+    cfg.auth.users = {}
+    cfg.auth.users[cfg.auth.username] = cfg.auth.passwordHash
+    delete cfg.auth.username
+    delete cfg.auth.passwordHash
+  }
+}
 const app = express()
 const server = http.createServer(app)
 const wss = new WebSocket.Server({ server })
@@ -265,8 +274,16 @@ async function updateMetrics() {
 setInterval(updateMetrics, 10000)
 
 function requireAuth(req, res, next) {
-  req.user = { username: 'system' }
-  next()
+  try {
+    const auth = req.headers.authorization || req.query.token || req.headers['x-access-token']
+    if (!auth) return res.status(401).json({ error: 'unauthenticated' })
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : auth
+    const decoded = jwt.verify(token, (cfg && cfg.auth && cfg.auth.jwtSecret) || '')
+    req.user = decoded || { username: 'system' }
+    return next()
+  } catch (e) {
+    return res.status(401).json({ error: 'invalid_token' })
+  }
 }
 
 function audit(actor, action, details) {
@@ -275,11 +292,18 @@ function audit(actor, action, details) {
 }
 
 app.post('/api/login', (req, res) => {
-  const { username, password } = req.body || {}
-  if (username !== cfg.auth.username) return res.status(401).json({ error: 'invalid' })
-  if (!bcrypt.compareSync(password, cfg.auth.passwordHash)) return res.status(401).json({ error: 'invalid' })
-  const token = jwt.sign({ username, role: 'admin' }, cfg.auth.jwtSecret, { expiresIn: '12h' })
-  res.json({ token })
+  try {
+    const { username, password } = req.body || {}
+    if (!username || !password) return res.status(400).json({ error: 'invalid' })
+    const conf = JSON.parse(fs.readFileSync(path.resolve('config.json'), 'utf8'))
+    const users = (conf && conf.auth && conf.auth.users) || (cfg && cfg.auth && cfg.auth.users) || {}
+    const hash = users[username]
+    if (!hash) return res.status(401).json({ error: 'invalid' })
+    if (!bcrypt.compareSync(password, hash)) return res.status(401).json({ error: 'invalid' })
+    const role = (username === 'admin') ? 'admin' : 'user'
+    const token = jwt.sign({ username, role }, cfg.auth.jwtSecret, { expiresIn: '12h' })
+    res.json({ token })
+  } catch (e) { res.status(500).json({ error: 'login_failed' }) }
 })
 
 app.get('/api/status', requireAuth, (req, res) => {
@@ -311,8 +335,61 @@ app.post('/api/stop', requireAuth, (req, res) => {
 app.post('/api/restart', requireAuth, (req, res) => {
   const name = req.body.name || activeInstanceName()
   stopInstance(name); setTimeout(()=>startInstance(name), 2000)
-  audit(req.user.username, 'restart', {})
+  audit(req.user.username, 'restart', { instance: name })
   res.json({ ok: true })
+})
+
+// Accounts API
+app.get('/api/accounts', requireAuth, (req, res) => {
+  try {
+    const conf = JSON.parse(fs.readFileSync(path.resolve('config.json'), 'utf8'))
+    const users = Object.keys((conf && conf.auth && conf.auth.users) || {})
+    if (req.user && req.user.username === 'admin') return res.json({ accounts: users.map(u=>({ username: u })) })
+    return res.json({ accounts: [{ username: req.user.username }] })
+  } catch { res.status(500).json({ error: 'accounts_failed' }) }
+})
+
+app.post('/api/accounts/change-password', requireAuth, (req, res) => {
+  try {
+    const { username, newPassword, currentPassword } = req.body || {}
+    if (!username || !newPassword) return res.status(400).json({ error: 'missing' })
+    if (!req.user) return res.status(401).json({ error: 'unauthenticated' })
+    const conf = JSON.parse(fs.readFileSync(path.resolve('config.json'), 'utf8'))
+    const users = (conf && conf.auth && conf.auth.users) || {}
+    if (req.user.username !== 'admin' && req.user.username !== username) return res.status(403).json({ error: 'forbidden' })
+    if (req.user.username === username) {
+      const cur = users[username]
+      if (!cur || !bcrypt.compareSync(currentPassword||'', cur)) return res.status(401).json({ error: 'invalid_current_password' })
+    }
+    const newHash = bcrypt.hashSync(newPassword, 10)
+    users[username] = newHash
+    const c = JSON.parse(fs.readFileSync(path.resolve('config.json'), 'utf8'))
+    c.auth = c.auth || {}
+    c.auth.users = users
+    fs.writeFileSync(path.resolve('config.json'), JSON.stringify(c, null, 2))
+    cfg.auth.users = users
+    audit(req.user.username, 'change_password', { username })
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'change_failed' }) }
+})
+
+app.post('/api/accounts/create', requireAuth, (req, res) => {
+  try {
+    if (!req.user || req.user.username !== 'admin') return res.status(403).json({ error: 'forbidden' })
+    const { username, password } = req.body || {}
+    if (!username || !password) return res.status(400).json({ error: 'missing' })
+    const conf = JSON.parse(fs.readFileSync(path.resolve('config.json'), 'utf8'))
+    const users = (conf && conf.auth && conf.auth.users) || {}
+    if (users[username]) return res.status(400).json({ error: 'exists' })
+    users[username] = bcrypt.hashSync(password, 10)
+    const c = JSON.parse(fs.readFileSync(path.resolve('config.json'), 'utf8'))
+    c.auth = c.auth || {}
+    c.auth.users = users
+    fs.writeFileSync(path.resolve('config.json'), JSON.stringify(c, null, 2))
+    cfg.auth.users = users
+    audit(req.user.username, 'create_account', { username })
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'create_failed' }) }
 })
 
 app.post('/api/kill', requireAuth, (req, res) => {

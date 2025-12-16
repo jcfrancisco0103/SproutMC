@@ -2,7 +2,7 @@ let token=null
 let ws=null
 function el(id){return document.getElementById(id)}
 const loadedTabs=new Set()
-function ensureTabData(t){try{if(loadedTabs.has(t))return;loadedTabs.add(t);if(t==='dashboard'){loadStatus()}if(t==='console'){loadConsoleHistory()}if(t==='files'){loadFiles(el('pathInput').value||'.')}if(t==='plugins'){loadPlugins()}if(t==='backups'){loadBackups()}if(t==='servers'){loadServers()}if(t==='tasks'){loadTasks()}if(t==='worlds'){loadWorlds()}if(t==='settings'){loadConfig()}}catch{}}
+function ensureTabData(t){try{if(loadedTabs.has(t))return;loadedTabs.add(t);if(t==='dashboard'){loadStatus()}if(t==='console'){loadConsoleHistory()}if(t==='files'){loadFiles(el('pathInput').value||'.')}if(t==='plugins'){loadPlugins()}if(t==='backups'){loadBackups()}if(t==='servers'){loadServers()}if(t==='tasks'){loadTasks()}if(t==='worlds'){loadWorlds()}if(t==='settings'){loadConfig()}if(t==='account'){loadAccounts()}}catch{}}
 function showTab(t){document.querySelectorAll('.tab').forEach(x=>{x.classList.remove('active');x.classList.add('hidden')});document.querySelectorAll('.side-nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));const editor=el('editor');if(editor){editor.classList.add('hidden');document.body.classList.remove('modal-open')}const s=el(t);s.classList.remove('hidden');localStorage.setItem('activeTab',t);ensureTabData(t);requestAnimationFrame(()=>{s.classList.add('active');if(t==='console'){const c=el('consoleOut');if(c)c.scrollTop=c.scrollHeight}}) }
 document.addEventListener('DOMContentLoaded',()=>{const tk=localStorage.getItem('token');if(!tk && location.pathname !== '/login.html'){location.href='/login.html'}const qp=new URLSearchParams(location.search);activeInstance=qp.get('instance')||activeInstance;connectWS();const t=localStorage.getItem('activeTab')||'dashboard';showTab(t);updateActiveHeader();const ub=el('updatesBtn');if(ub)ub.onclick=()=>{document.body.classList.add('modal-open');const m=el('updatesModal');if(m)m.classList.remove('hidden')};const logout=el('logoutBtn');if(logout){logout.onclick=()=>{localStorage.removeItem('token');location.href='/login.html'}};const collapse=document.getElementById('collapseSidebar');if(collapse){collapse.onclick=()=>{const pressed=collapse.getAttribute('aria-pressed')==='true';collapse.setAttribute('aria-pressed',String(!pressed));document.getElementById('app').classList.toggle('sidebar-collapsed')}}
 
@@ -32,7 +32,7 @@ function setActionPhase(action, phase){try{const btns = (action==='restart') ? [
 
 function waitForOnline(timeoutMs=60000){ if(restartWatcher) clearTimeout(restartWatcher); restartWatcher=setTimeout(()=>{ setActionLoading('restart', false); setActionPhase('restart', null); showToast('Restart timed out — check server', 'warn', 8000); restartWatcher=null }, timeoutMs) }
 function auth(){const tk=localStorage.getItem('token');return tk?{ Authorization: 'Bearer '+tk }:{}}
-function urlInst(u){if(!activeInstance) return u;return u+(u.includes('?')?'&':'?')+'inst='+encodeURIComponent(activeInstance)}
+function getCurrentUsername(){try{const tk=localStorage.getItem('token');if(!tk) return null;const p=tk.split('.');if(p.length<2) return null;const payload=JSON.parse(atob(p[1].replace(/-/g,'+').replace(/_/g,'/')));return payload.username}catch(e){return null}}function urlInst(u){if(!activeInstance) return u;return u+(u.includes('?')?'&':'?')+'inst='+encodeURIComponent(activeInstance)}
 function urlName(u){if(!activeInstance) return u;return u+(u.includes('?')?'&':'?')+'name='+encodeURIComponent(activeInstance)}
 function apiFetch(url,opt){const o=opt||{};o.headers={...(o.headers||{}),...auth()};return fetch(url,o)}
 function apiUpload(url,fd,onp,opts){return new Promise((resolve,reject)=>{const x=new XMLHttpRequest();x.open('POST',url);const h=auth();Object.keys(h).forEach(k=>x.setRequestHeader(k,h[k]));let last=Date.now();x.upload.onprogress=e=>{if(e.lengthComputable&&onp)onp(Math.round(e.loaded*100/e.total));last=Date.now()};let stallTimer=null;if(opts&&opts.stallMs){stallTimer=setInterval(()=>{if(Date.now()-last>opts.stallMs){try{x.abort()}catch{}}},opts.stallMs)};if(opts&&opts.timeoutMs){setTimeout(()=>{try{x.abort()}catch{}},opts.timeoutMs)};x.onload=()=>{if(stallTimer)clearInterval(stallTimer);resolve({ok:x.status>=200&&x.status<300,status:x.status,body:x.responseText})};x.onerror=()=>{if(stallTimer)clearInterval(stallTimer);reject(new TypeError('network_error'))};x.send(fd)})}
@@ -50,6 +50,26 @@ function updateStatus(s, inst){const txt=`${s.online?'Online':'Offline'}${s.cras
   }catch(e){}
 }
 async function loadStatus(){const r=await apiFetch(urlName('/api/status'));const j=await r.json();activeInstance=j.instance||activeInstance;updateStatus(j.status);updateMetrics(j.metrics);updateActiveHeader()}
+
+async function loadAccounts(){try{const r=await apiFetch('/api/accounts');if(!r.ok){showToast('Cannot load accounts','warn');return}const j=await r.json();const sel=el('acctSelect');sel.innerHTML='';const cur=getCurrentUsername();const accounts=(j.accounts||[]).map(a=>a.username);accounts.forEach(u=>{const o=document.createElement('option');o.value=u;o.textContent=u;sel.appendChild(o)});if(cur){sel.value=cur}else if(accounts.length){sel.value=accounts[0]}
+  // if not admin, hide current password row
+  if(cur !== 'admin'){el('currentPwdRow').style.display='block'} else {el('currentPwdRow').style.display='none'}
+}catch(e){console.warn(e);showToast('Failed to fetch accounts','warn')} }
+
+el('acctSelect')?.addEventListener('change', ()=>{const cur=getCurrentUsername();const sel=el('acctSelect');if(!sel) return; if(cur !== 'admin' && sel.value !== cur){ // non-admin selecting another (shouldn't really happen)
+  el('currentPwdRow').style.display='none'
+ } else { el('currentPwdRow').style.display='block' } })
+
+el('acctSave')?.addEventListener('click', async ()=>{
+  try{
+    const sel = el('acctSelect'); if(!sel) return; const username = sel.value; const cur = getCurrentUsername(); const newPwd = el('acctNewPwd').value; const newPwd2 = el('acctNewPwd2').value; const currentPwd = el('acctCurrentPwd').value;
+    if(!newPwd) { showToast('Enter new password','warn'); return }
+    if(newPwd !== newPwd2){ showToast('Passwords do not match','warn'); return }
+    const body = { username, newPassword: newPwd }
+    if(cur !== 'admin' || cur === username) body.currentPassword = currentPwd
+    const r = await apiFetch('/api/accounts/change-password',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
+    if(r.ok){ showToast('Password updated','success'); el('acctCurrentPwd').value=''; el('acctNewPwd').value=''; el('acctNewPwd2').value=''} else { const j=await r.json(); showToast('Update failed: '+(j && j.error)||'error','danger') }
+  }catch(e){console.warn(e);showToast('Update failed','danger')} })
 function stripAnsi(s){return s.replace(/\x1b\[[0-9;]*m/g,'')}
 function classifySeverity(sev,line){const s=(sev||'').toLowerCase();const L=line||'';if(s.includes('error')||L.includes('ERROR'))return'log-error';if(s.includes('warn')||L.includes('WARN'))return'log-warn';if(s.includes('debug'))return'log-debug';if(s.includes('info'))return'log-info';if(L.includes('WRAPPER'))return'log-system';return'log-info'}
 function renderColoredLine(line,target){const clean=stripAnsi(line);const m=clean.match(/^\[(\d{2}:\d{2}:\d{2})] \[(.+?)\/(.+?)]:\s(.*)$/);const row=document.createElement('div');row.className='log-line';if(m){const ts=m[1],thread=m[2],sev=m[3],msg=m[4];row.classList.add(classifySeverity(sev,clean));const tsSpan=document.createElement('span');tsSpan.className='log-ts';tsSpan.textContent = `[${ts}]`;row.appendChild(tsSpan);const thSpan=document.createElement('span');thSpan.className='log-thread';thSpan.textContent = `[${thread}]`;row.appendChild(thSpan);const tag=document.createElement('span');const sevClass=classifySeverity(sev,clean);tag.className='log-tag'+(sevClass==='log-warn'?' warn':sevClass==='log-error'?' error':sevClass==='log-debug'?' debug':'');tag.textContent = sev.toUpperCase();row.appendChild(tag);const msgSpan=document.createElement('span');msgSpan.textContent = msg;row.appendChild(msgSpan)}else{row.classList.add(classifySeverity('',clean));const s=document.createElement('span');s.textContent = clean;row.appendChild(s)}target.appendChild(row);target.scrollTop=target.scrollHeight}

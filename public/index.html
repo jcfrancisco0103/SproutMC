@@ -28,6 +28,7 @@
         <button data-tab="metrics">📊 <span class="label">Metrics</span></button>
         <button data-tab="terminal">⌨️ <span class="label">Terminal</span></button>
         <button data-tab="settings">⚙️ <span class="label">Settings</span></button>
+        <button data-tab="account">👤 <span class="label">Account</span></button>
       </nav>
     </aside>
 
@@ -199,6 +200,31 @@
               <button id="cfgSave">Save Config</button>
               <span id="cfgNote">Wrapper restart required to apply config.</span>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="account" class="tab hidden">
+        <div class="card">
+          <h3>Account</h3>
+          <div class="row">
+            <label class="form-label">Account</label>
+            <select id="acctSelect" class="form-input"></select>
+          </div>
+          <div class="row" id="currentPwdRow">
+            <label class="form-label">Current Password</label>
+            <input id="acctCurrentPwd" type="password" class="form-input" />
+          </div>
+          <div class="row">
+            <label class="form-label">New Password</label>
+            <input id="acctNewPwd" type="password" class="form-input" />
+          </div>
+          <div class="row">
+            <label class="form-label">Confirm New Password</label>
+            <input id="acctNewPwd2" type="password" class="form-input" />
+          </div>
+          <div class="row">
+            <button id="acctSave" class="btn">Save Password</button>
           </div>
         </div>
       </section>

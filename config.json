@@ -9,8 +9,13 @@
   "autoRestart": false,
   "autoRestartMaxBackoffSeconds": 300,
   "auth": {
-    "username": "admin",
-    "passwordHash": "$2a$10$GEZNyw5/JZp7TEuoK6osNesi7TuoG7yQh3fYVs3bfqsWQWDyU7lqW",
-    "jwtSecret": "change-this-secret"
+    "jwtSecret": "change-this-secret",
+    "users": {
+      "admin": "$2a$10$GEZNyw5/JZp7TEuoK6osNesi7TuoG7yQh3fYVs3bfqsWQWDyU7lqW",
+      "yuzaki": "$2a$10$anNRLJJ1ayDIiICcE6SaEOEdBWiVB/IIWZHp7KXEBxGJvvJFM79dS",
+      "mersyeon": "$2a$10$RyGE015nV1vaK3WbyBcQ/.W1AusOX0Q3CvZBsCfPZIo/Nvc2zj0bO",
+      "azie": "$2a$10$anNRLJJ1ayDIiICcE6SaEOEdBWiVB/IIWZHp7KXEBxGJvvJFM79dS",
+      "remo": "$2a$10$anNRLJJ1ayDIiICcE6SaEOEdBWiVB/IIWZHp7KXEBxGJvvJFM79dS"
+    }
   }
 }
