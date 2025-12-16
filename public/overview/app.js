@@ -121,6 +121,12 @@
               const players = (m.payload && m.payload.players) || []
               if (inst) updatePlayersFor(inst, players)
             }
+            if (m.type === 'chat') {
+              const inst = (m.payload && m.payload.instance) || null
+              const player = (m.payload && m.payload.player) || 'Server'
+              const message = (m.payload && m.payload.message) || ''
+              if (inst) addChatMessage(inst, player, message)
+            }
           } catch (err) { console.warn('WS message parse failed', err) }
         }
         ws.onclose = () => {
@@ -160,6 +166,23 @@
       // update player count in header
       const header = li.querySelector('div > div > div:nth-child(2)')
       if (header) header.textContent = 'Players: ' + (players ? players.length : '—')
+    }
+
+    function addChatMessage(inst, player, message){
+      const chatEl = document.getElementById('chat-messages')
+      if (!chatEl) return
+      const div = document.createElement('div')
+      div.style.cssText = 'padding:4px;border-radius:4px;background:rgba(255,255,255,0.04);color:#eaffea'
+      const time = new Date().toLocaleTimeString()
+      div.innerHTML = `<div style="font-weight:700;color:#2bbd52">${player}</div><div style="color:rgba(255,255,255,0.8)">${message}</div><div style="font-size:11px;color:rgba(255,255,255,0.5);margin-top:2px">${time}</div>`
+      chatEl.appendChild(div)
+      // Keep only last 50 messages
+      while (chatEl.children.length > 50) chatEl.removeChild(chatEl.firstChild)
+      // Auto-scroll to bottom
+      chatEl.scrollTop = chatEl.scrollHeight
+      // Update status
+      const statusEl = document.getElementById('chat-status')
+      if (statusEl) statusEl.textContent = 'Live chat active'
     }
 
     tryConnect()

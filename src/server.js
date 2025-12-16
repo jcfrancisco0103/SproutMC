@@ -1362,17 +1362,28 @@ function appendConsoleFor(name, line){
         const names = (m[1]||'').split(',').map(s=>s.trim()).filter(Boolean)
         set.clear(); names.forEach(n=>{ if (n) set.add(n) })
       }
-      m = line.match(/\]:\s(.+?)\sjoined the game/i)
-      if (m) set.add(m[1])
-      m = line.match(/\]:\s(.+?)\sleft the game/i)
-      if (m) set.delete(m[1])
-      m = line.match(/\]:\s(.+?)\sjoined the server/i)
-      if (m) set.add(m[1])
-      m = line.match(/\]:\s(.+?)\sleft the server/i)
-      if (m) set.delete(m[1])
+      // Improved join/leave patterns: capture player name flexibly
+      m = line.match(/(?:joined|logged in|connected|connected with)/i)
+      if (m) {
+        const pname = line.match(/(?:(?:\]: |user\s|player\s|\()?([a-zA-Z0-9_]{2,16})(?:\s(?:joined|logged|connected)|])?)/i)
+        if (pname && pname[1]) set.add(pname[1])
+      }
+      m = line.match(/(?:left|disconnected|left the game|left the server)/i)
+      if (m) {
+        const pname = line.match(/(?:(?:\]: |user\s|player\s)([a-zA-Z0-9_]{2,16})(?:\s(?:left|disconnected)))/i)
+        if (pname && pname[1]) set.delete(pname[1])
+      }
 
       // Broadcast players update for the instance
       broadcast('players', { instance: name, players: Array.from(set) })
+
+      // Capture chat messages: '<PlayerName> message' format
+      const chatMatch = line.match(/(?:\]:\s)?<([a-zA-Z0-9_]+)>\s(.+)$/)
+      if (chatMatch) {
+        const player = chatMatch[1]
+        const message = chatMatch[2]
+        broadcast('chat', { instance: name, player, message, timestamp: new Date().toISOString() })
+      }
     } catch (e) {}
 
     broadcast('console', { instance: name, line })
