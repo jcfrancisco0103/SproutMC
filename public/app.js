@@ -4,7 +4,18 @@ function el(id){return document.getElementById(id)}
 const loadedTabs=new Set()
 function ensureTabData(t){try{if(loadedTabs.has(t))return;loadedTabs.add(t);if(t==='dashboard'){loadStatus()}if(t==='console'){loadConsoleHistory()}if(t==='files'){loadFiles(el('pathInput').value||'.')}if(t==='plugins'){loadPlugins()}if(t==='backups'){loadBackups()}if(t==='servers'){loadServers()}if(t==='tasks'){loadTasks()}if(t==='worlds'){loadWorlds()}if(t==='settings'){loadConfig()}if(t==='account'){loadAccounts()}}catch{}}
 function showTab(t){document.querySelectorAll('.tab').forEach(x=>{x.classList.remove('active');x.classList.add('hidden')});document.querySelectorAll('.side-nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));const editor=el('editor');if(editor){editor.classList.add('hidden');document.body.classList.remove('modal-open')}const s=el(t);s.classList.remove('hidden');localStorage.setItem('activeTab',t);ensureTabData(t);requestAnimationFrame(()=>{s.classList.add('active');if(t==='console'){const c=el('consoleOut');if(c)c.scrollTop=c.scrollHeight}}) }
-document.addEventListener('DOMContentLoaded',()=>{const tk=localStorage.getItem('token');if(!tk && location.pathname !== '/login.html'){location.href='/login.html'}const qp=new URLSearchParams(location.search);activeInstance=qp.get('instance')||activeInstance;connectWS();const t=localStorage.getItem('activeTab')||'dashboard';showTab(t);updateActiveHeader();const ub=el('updatesBtn');if(ub)ub.onclick=()=>{document.body.classList.add('modal-open');const m=el('updatesModal');if(m)m.classList.remove('hidden')};const logout=el('logoutBtn');if(logout){logout.onclick=()=>{localStorage.removeItem('token');location.href='/login.html'}};const collapse=document.getElementById('collapseSidebar');if(collapse){collapse.onclick=()=>{const pressed=collapse.getAttribute('aria-pressed')==='true';collapse.setAttribute('aria-pressed',String(!pressed));document.getElementById('app').classList.toggle('sidebar-collapsed')}}
+document.addEventListener('DOMContentLoaded',()=>{const tk=localStorage.getItem('token');if(!tk && location.pathname !== '/login.html'){location.href='/login.html'}
+  const qp=new URLSearchParams(location.search);
+  // Prefer URL param for deep-links, then per-tab session value, then server default
+  const sessionActive = sessionStorage.getItem('activeInstance')
+  activeInstance = qp.get('instance') || sessionActive || activeInstance
+  connectWS();
+  const t=localStorage.getItem('activeTab')||'dashboard';showTab(t);updateActiveHeader();
+
+  // render active selector dropdown into header
+  renderActiveSelector();
+
+  const ub=el('updatesBtn');if(ub)ub.onclick=()=>{document.body.classList.add('modal-open');const m=el('updatesModal');if(m)m.classList.remove('hidden')};const logout=el('logoutBtn');if(logout){logout.onclick=()=>{localStorage.removeItem('token');location.href='/login.html'}};const collapse=document.getElementById('collapseSidebar');if(collapse){collapse.onclick=()=>{const pressed=collapse.getAttribute('aria-pressed')==='true';collapse.setAttribute('aria-pressed',String(!pressed));document.getElementById('app').classList.toggle('sidebar-collapsed')}}
 
   // Theme: dark-only (no toggle). Ensure any saved light preference is cleared.
   try{ document.documentElement.removeAttribute('data-theme'); localStorage.removeItem('theme'); }catch(e){}
@@ -19,7 +30,7 @@ document.addEventListener('DOMContentLoaded',()=>{const tk=localStorage.getItem(
 })
 document.querySelectorAll('.side-nav button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab))
 if(el('logoutBtn')){el('logoutBtn').onclick=()=>{}}
-function updateActiveHeader(){const h=el('activeInstanceHeader');if(h)h.textContent='Active: '+(activeInstance||'(none)')}
+function updateActiveHeader(){const label=el('activeInstanceLabel');if(label)label.textContent=(activeInstance||'(none)');const btn=el('activeInstanceBtn');if(btn)btn.setAttribute('aria-expanded','false');const dd=el('activeInstanceDropdown');if(dd)dd.classList.add('hidden')}
 // Action state tracking (e.g., restart in progress)
 const actionState = {}
 let restartWatcher = null
@@ -288,9 +299,57 @@ if(el('applyUpdateTab')){
 }
 function showLoading(){const o=el('loadingOverlay');if(o)o.classList.remove('hidden')}
 function hideLoading(){const o=el('loadingOverlay');if(o)o.classList.add('hidden')}
-async function loadServers(){showLoading();try{const r=await apiFetch('/api/instances');const j=await r.json();activeInstance=j.active||null;updateActiveHeader();const t=el('serverTable');t.innerHTML='<tr><th>Name</th><th>Status</th><th>Actions</th></tr>';el('serverActive').textContent=j.active?('Active: '+j.active):'Active: (none)';(j.instances||[]).forEach(async name=>{const tr=document.createElement('tr');const tdN=document.createElement('td');tdN.textContent=name;const tdS=document.createElement('td');const pill=document.createElement('div');pill.className='status-pill';pill.textContent='Loading...';tdS.appendChild(pill);serverStatusEls.set(name,pill);const tdA=document.createElement('td');const sel=document.createElement('button');sel.textContent='Select';sel.onclick=async()=>{await apiFetch('/api/instances/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});activeInstance=name;updateActiveHeader();const co=el('consoleOut'),lp=el('logsPreview');if(co)co.innerHTML='';if(lp)lp.innerHTML='';await loadStatus();await loadConsoleHistory();loadServers();loadFiles('.');loadPlugins();loadBackups();loadTasks();loadWorlds()};tdA.appendChild(sel);const st=document.createElement('button');st.textContent='Start';st.onclick=async()=>{await apiFetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});await loadServers()};tdA.appendChild(st);const sp=document.createElement('button');sp.textContent='Stop';sp.onclick=async()=>{await apiFetch('/api/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});await loadServers()};tdA.appendChild(sp);const kl=document.createElement('button');kl.textContent='Kill';kl.onclick=async()=>{const ok=await showConfirm('Kill this server?');if(!ok)return;await apiFetch('/api/kill',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});await loadServers()};tdA.appendChild(kl);const del=document.createElement('button');del.textContent='Delete';del.onclick=async()=>{const ok=await showConfirm('Delete this server?');if(!ok)return;await apiFetch('/api/instances/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});loadServers()};tdA.appendChild(del);tr.appendChild(tdN);tr.appendChild(tdS);tr.appendChild(tdA);t.appendChild(tr);try{const rr=await apiFetch('/api/status?name='+encodeURIComponent(name));const jj=await rr.json();const st0=jj.status||{};pill.textContent=`${st0.online?'Online':'Offline'}${st0.crashed?' (crashed)':''}`;pill.className='status-pill '+(st0.crashed?'status-crashed':(st0.online?'status-online':'status-offline'))}catch{pill.textContent='Unknown';pill.className='status-pill'}});hideLoading()}catch{hideLoading()}}
+async function loadServers(){showLoading();try{const r=await apiFetch('/api/instances');const j=await r.json();activeInstance=j.active||activeInstance;updateActiveHeader();const t=el('serverTable');t.innerHTML='<tr><th>Name</th><th>Status</th><th>Actions</th></tr>';el('serverActive').textContent=j.active?('Active: '+j.active):'Active: (none)';(j.instances||[]).forEach(async name=>{const tr=document.createElement('tr');const tdN=document.createElement('td');tdN.textContent=name;const tdS=document.createElement('td');const pill=document.createElement('div');pill.className='status-pill';pill.textContent='Loading...';tdS.appendChild(pill);serverStatusEls.set(name,pill);const tdA=document.createElement('td');const sel=document.createElement('button');sel.textContent='Open';sel.onclick=async()=>{ /* per-tab open */ activeInstance=name; try{ sessionStorage.setItem('activeInstance', name) }catch{} updateActiveHeader();const co=el('consoleOut'),lp=el('logsPreview');if(co)co.innerHTML='';if(lp)lp.innerHTML='';await loadStatus();await loadConsoleHistory();loadServers();loadFiles('.');loadPlugins();loadBackups();loadTasks();loadWorlds()};tdA.appendChild(sel);const setg=document.createElement('button');setg.textContent='Set Global';setg.onclick=async()=>{if(!confirm('Set this instance as the global active instance for the wrapper?')) return;const r2=await apiFetch('/api/instances/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});if(r2.ok){showToast('Active instance set globally','success');loadServers()}else{showToast('Failed to set global active','warn')}};tdA.appendChild(setg);const st=document.createElement('button');st.textContent='Start';st.onclick=async()=>{await apiFetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});await loadServers()};tdA.appendChild(st);const sp=document.createElement('button');sp.textContent='Stop';sp.onclick=async()=>{await apiFetch('/api/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});await loadServers()};tdA.appendChild(sp);const kl=document.createElement('button');kl.textContent='Kill';kl.onclick=async()=>{const ok=await showConfirm('Kill this server?');if(!ok)return;await apiFetch('/api/kill',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});await loadServers()};tdA.appendChild(kl);const del=document.createElement('button');del.textContent='Delete';del.onclick=async()=>{const ok=await showConfirm('Delete this server?');if(!ok)return;await apiFetch('/api/instances/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});loadServers()};tdA.appendChild(del);tr.appendChild(tdN);tr.appendChild(tdS);tr.appendChild(tdA);t.appendChild(tr);try{const rr=await apiFetch('/api/status?name='+encodeURIComponent(name));const jj=await rr.json();const st0=jj.status||{};pill.textContent=`${st0.online?'Online':'Offline'}${st0.crashed?' (crashed)':''}`;pill.className='status-pill '+(st0.crashed?'status-crashed':(st0.online?'status-online':'status-offline'))}catch{pill.textContent='Unknown';pill.className='status-pill'}});hideLoading()}catch{hideLoading()}}
 if(el('serverCreate')) el('serverCreate').onclick=async()=>{const name=(el('serverName').value||'').trim();if(!name)return;await apiFetch('/api/instances/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});el('serverName').value='';loadServers()}
 document.addEventListener('DOMContentLoaded',loadServers)
+
+// Render the Active Instance selector dropdown in the header
+function renderActiveSelector(){
+  const btn = el('activeInstanceBtn');
+  const dd = el('activeInstanceDropdown');
+  if(!btn || !dd) return;
+
+  btn.onclick = async (e) => {
+    try{
+      const expanded = btn.getAttribute('aria-expanded') === 'true';
+      if(expanded){ dd.classList.add('hidden'); btn.setAttribute('aria-expanded','false'); return }
+      btn.setAttribute('aria-expanded','true'); dd.classList.remove('hidden'); dd.innerHTML = '<div style="padding:8px">Loading…</div>';
+      const r = await apiFetch('/api/instances');
+      if(!r.ok){ dd.innerHTML = '<div style="padding:8px">Failed to load</div>'; return }
+      const j = await r.json();
+      dd.innerHTML = '';
+      const items = j.instances || [];
+      if(items.length===0){ dd.innerHTML = '<div style="padding:8px">No instances</div>'; return }
+      items.forEach(name=>{
+        const row = document.createElement('div'); row.className = 'item';
+        const nm = document.createElement('span'); nm.className = 'name'; nm.textContent = name; row.appendChild(nm);
+        const actions = document.createElement('span'); actions.className = 'actions';
+        const openBtn = document.createElement('button'); openBtn.className='btn small'; openBtn.textContent='Open';
+        openBtn.onclick = async (ev) => {
+          ev.stopPropagation(); activeInstance = name; try{ sessionStorage.setItem('activeInstance', name) }catch{} updateActiveHeader();
+          // refresh relevant views for this tab
+          await loadStatus(); await loadConsoleHistory(); loadServers(); loadFiles('.'); loadPlugins(); loadBackups(); loadTasks(); loadWorlds();
+          dd.classList.add('hidden'); btn.setAttribute('aria-expanded','false');
+        };
+        actions.appendChild(openBtn);
+        const setBtn = document.createElement('button'); setBtn.className='btn small'; setBtn.textContent='Set Global';
+        setBtn.onclick = async (ev) => { ev.stopPropagation(); if(!confirm('Set this instance as the global active instance for the wrapper?')) return; const r2 = await apiFetch('/api/instances/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})}); if(r2.ok){ showToast('Active instance set globally','success'); loadServers(); } else { showToast('Failed to set global active','warn'); } };
+        actions.appendChild(setBtn);
+        row.appendChild(actions);
+        dd.appendChild(row);
+      })
+    }catch(e){ dd.innerHTML = '<div style="padding:8px">Error</div>' }
+  }
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', (ev)=>{
+    const p = ev.composedPath ? ev.composedPath() : (ev.path || []);
+    if(!p.includes(dd) && !p.includes(btn)){
+      dd.classList.add('hidden'); btn.setAttribute('aria-expanded','false');
+    }
+  })
+}
+
 if(el('serverStartAll')) el('serverStartAll').onclick=async()=>{try{const r=await apiFetch('/api/instances');const j=await r.json();const names=j.instances||[];await Promise.all(names.map(n=>apiFetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})})));await loadStatus()}catch{}}
 if(el('serverStopAll')) el('serverStopAll').onclick=async()=>{try{const r=await apiFetch('/api/instances');const j=await r.json();const names=j.instances||[];await Promise.all(names.map(n=>apiFetch('/api/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})})));await loadStatus()}catch{}}
 if(el('serverKillAll')) el('serverKillAll').onclick=async()=>{const ok=await showConfirm('Kill all servers?');if(!ok)return;try{const r=await apiFetch('/api/instances');const j=await r.json();const names=j.instances||[];await Promise.all(names.map(n=>apiFetch('/api/kill',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})})));await loadStatus()}catch{}}
