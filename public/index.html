@@ -6,36 +6,48 @@
   <title>SproutMC Wrapper</title>
   <link rel="icon" type="image/png" href="/logo.png" />
   <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/ui.css" />
 </head>
 <body>
   <div id="app">
-    <header>
-      <div class="brand">
-        <img id="brandLogo" src="/logo.png" alt="SproutMC" class="brand-logo" onerror="this.classList.add('hidden')" />
-        <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4bd66a" d="M12 3c-3 4-7 5-8 9 0 5 4 9 8 9s8-4 8-9c-3-2-6-4-8-9z"/></svg>
-        <span>SproutMC Wrapper</span>
+    <aside class="sidebar" id="sidebar">
+      <div class="logo-row">
+        <div class="logo">SproutMC</div>
+        <button id="collapseSidebar" class="btn small" aria-pressed="false" title="Toggle sidebar">≡</button>
       </div>
-      <div class="header-actions">
-        <div id="statusBar" class="status-pill"></div>
-        <span id="activeInstanceHeader"></span>
-        <button id="updatesBtn">Updates</button>
-      </div>
-    </header>
-    <nav class="tabs">
-      <button data-tab="dashboard" class="active">Dashboard</button>
-      <button data-tab="console">Console</button>
-      <button data-tab="files">Files</button>
-      <button data-tab="plugins">Plugins</button>
-      <button data-tab="backups">Backups</button>
-      <button data-tab="servers">Servers</button>
-      <button data-tab="tasks">Tasks</button>
-      <button data-tab="worlds">Worlds</button>
-      <button data-tab="settings">Settings</button>
-      <button data-tab="updates">Updates</button>
-      <button data-tab="metrics">Metrics</button>
-      <button data-tab="terminal">Terminal</button>
-    </nav>
-    <main class="container">
+      <nav class="side-nav" role="navigation">
+        <button data-tab="dashboard" class="active">🏠 <span class="label">Dashboard</span></button>
+        <button data-tab="console">🖥 <span class="label">Console</span></button>
+        <button data-tab="files">📁 <span class="label">Files</span></button>
+        <button data-tab="plugins">🔌 <span class="label">Plugins</span></button>
+        <button data-tab="backups">🗄 <span class="label">Backups</span></button>
+        <button data-tab="servers">🧭 <span class="label">Servers</span></button>
+        <button data-tab="tasks">🕑 <span class="label">Tasks</span></button>
+        <button data-tab="worlds">🌐 <span class="label">Worlds</span></button>
+        <button data-tab="updates">⬆️ <span class="label">Updates</span></button>
+        <button data-tab="metrics">📊 <span class="label">Metrics</span></button>
+        <button data-tab="terminal">⌨️ <span class="label">Terminal</span></button>
+        <button data-tab="settings">⚙️ <span class="label">Settings</span></button>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="top-left">
+          <div class="brand">
+            <img id="brandLogo" src="/logo.png" alt="SproutMC" class="brand-logo" onerror="this.classList.add('hidden')" />
+            <span>SproutMC Wrapper</span>
+          </div>
+          <div class="pill status" id="headerStatus">--</div>
+        </div>
+        <div class="topbar actions">
+          <span id="activeInstanceHeader"></span>
+          <button id="updatesBtn">Updates</button>
+
+          <button id="logoutBtn" class="btn small">Logout</button>
+        </div>
+      </header>
+    <div class="container">
       <section id="dashboard" class="tab active">
         <div class="grid">
           <div class="card">
@@ -43,6 +55,7 @@
             <div id="statusText"></div>
             <button id="startBtn" class="btn-accent">Start</button>
             <button id="stopBtn" class="btn-warning">Stop</button>
+            <button id="restartBtn" class="btn">Restart</button>
             <button id="killBtn" class="btn-danger">Kill</button>
           </div>
           <div class="card">
@@ -74,6 +87,7 @@
           <div class="row">
             <button id="consoleStart" class="btn-accent">Start</button>
             <button id="consoleStop" class="btn-warning">Stop</button>
+            <button id="consoleRestart" class="btn">Restart</button>
             <button id="consoleKill" class="btn-danger">Kill</button>
             <div style="flex:1"></div>
             <button id="consoleJumpLast">Jump to last line</button>
@@ -205,6 +219,7 @@
           <div class="console" id="termOut"></div>
         </div>
       </section>
+    </div>
     </main>
     <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div></div>
     <div id="updatesModal" class="modal-overlay hidden">

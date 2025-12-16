@@ -3,12 +3,35 @@ let ws=null
 function el(id){return document.getElementById(id)}
 const loadedTabs=new Set()
 function ensureTabData(t){try{if(loadedTabs.has(t))return;loadedTabs.add(t);if(t==='dashboard'){loadStatus()}if(t==='console'){loadConsoleHistory()}if(t==='files'){loadFiles(el('pathInput').value||'.')}if(t==='plugins'){loadPlugins()}if(t==='backups'){loadBackups()}if(t==='servers'){loadServers()}if(t==='tasks'){loadTasks()}if(t==='worlds'){loadWorlds()}if(t==='settings'){loadConfig()}}catch{}}
-function showTab(t){document.querySelectorAll('.tab').forEach(x=>{x.classList.remove('active');x.classList.add('hidden')});document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));const editor=el('editor');if(editor){editor.classList.add('hidden');document.body.classList.remove('modal-open')}const s=el(t);s.classList.remove('hidden');localStorage.setItem('activeTab',t);ensureTabData(t);requestAnimationFrame(()=>{s.classList.add('active');if(t==='console'){const c=el('consoleOut');if(c)c.scrollTop=c.scrollHeight}})}
-document.addEventListener('DOMContentLoaded',()=>{const qp=new URLSearchParams(location.search);activeInstance=qp.get('instance')||activeInstance;connectWS();const t=localStorage.getItem('activeTab')||'dashboard';showTab(t);updateActiveHeader();const ub=el('updatesBtn');if(ub)ub.onclick=()=>{document.body.classList.add('modal-open');const m=el('updatesModal');if(m)m.classList.remove('hidden')}})
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab))
+function showTab(t){document.querySelectorAll('.tab').forEach(x=>{x.classList.remove('active');x.classList.add('hidden')});document.querySelectorAll('.side-nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));const editor=el('editor');if(editor){editor.classList.add('hidden');document.body.classList.remove('modal-open')}const s=el(t);s.classList.remove('hidden');localStorage.setItem('activeTab',t);ensureTabData(t);requestAnimationFrame(()=>{s.classList.add('active');if(t==='console'){const c=el('consoleOut');if(c)c.scrollTop=c.scrollHeight}}) }
+document.addEventListener('DOMContentLoaded',()=>{const tk=localStorage.getItem('token');if(!tk && location.pathname !== '/login.html'){location.href='/login.html'}const qp=new URLSearchParams(location.search);activeInstance=qp.get('instance')||activeInstance;connectWS();const t=localStorage.getItem('activeTab')||'dashboard';showTab(t);updateActiveHeader();const ub=el('updatesBtn');if(ub)ub.onclick=()=>{document.body.classList.add('modal-open');const m=el('updatesModal');if(m)m.classList.remove('hidden')};const logout=el('logoutBtn');if(logout){logout.onclick=()=>{localStorage.removeItem('token');location.href='/login.html'}};const collapse=document.getElementById('collapseSidebar');if(collapse){collapse.onclick=()=>{const pressed=collapse.getAttribute('aria-pressed')==='true';collapse.setAttribute('aria-pressed',String(!pressed));document.getElementById('app').classList.toggle('sidebar-collapsed')}}
+
+  // Theme: dark-only (no toggle). Ensure any saved light preference is cleared.
+  try{ document.documentElement.removeAttribute('data-theme'); localStorage.removeItem('theme'); }catch(e){}
+
+  // Fallback polling in case WebSocket isn't available or misses updates
+  setInterval(async ()=>{
+    try{
+      const r = await apiFetch('/api/status');
+      if (r.ok){ const j = await r.json(); if (j.status) updateStatus(j.status); if (j.metrics) updateMetrics(j.metrics); }
+    }catch(e){}
+  }, 10*1000);
+})
+document.querySelectorAll('.side-nav button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab))
 if(el('logoutBtn')){el('logoutBtn').onclick=()=>{}}
 function updateActiveHeader(){const h=el('activeInstanceHeader');if(h)h.textContent='Active: '+(activeInstance||'(none)')}
-function auth(){return{}}
+// Action state tracking (e.g., restart in progress)
+const actionState = {}
+let restartWatcher = null
+
+function showToast(msg, type='info', ms=4000){try{const t=el('toast');if(!t) return; t.className='toast'; if(type==='success') t.classList.add('toast-success'); else if(type==='danger'||type==='error') t.classList.add('toast-error'); else if(type==='warn') t.classList.add('toast-warn'); t.textContent=msg; t.classList.remove('hidden'); t.setAttribute('aria-hidden','false'); if(restartWatcher && type==='success'){} setTimeout(()=>{try{t.classList.add('hidden');t.setAttribute('aria-hidden','true')}catch{}}, ms)}catch(e){console.warn('toast failed',e)}}
+
+function setActionLoading(action, inProgress){try{actionState[action]=!!inProgress; const btns = (action==='restart') ? [el('restartBtn'), el('consoleRestart')] : []; btns.forEach(b=>{if(!b) return; if(inProgress){b.disabled=true; b.setAttribute('aria-busy','true'); b.dataset.origText = b.textContent; b.textContent = 'Restarting…'; const sp = document.createElement('span'); sp.className = 'btn-spinner'; b.prepend(sp);} else {b.disabled=false; b.removeAttribute('aria-busy'); if(b.dataset.origText){b.textContent=b.dataset.origText; delete b.dataset.origText} const sp = b.querySelector('.btn-spinner'); if(sp) sp.remove();}})}catch(e){console.warn('setActionLoading failed',e)}}
+
+function setActionPhase(action, phase){try{const btns = (action==='restart') ? [el('restartBtn'), el('consoleRestart')] : []; btns.forEach(b=>{if(!b) return; if(phase){ if(!b.dataset.origText) b.dataset.origText = b.textContent; b.textContent = phase } else { if(b.dataset.origText){ b.textContent = b.dataset.origText; delete b.dataset.origText } } })}catch(e){console.warn('setActionPhase failed',e)}}
+
+function waitForOnline(timeoutMs=60000){ if(restartWatcher) clearTimeout(restartWatcher); restartWatcher=setTimeout(()=>{ setActionLoading('restart', false); setActionPhase('restart', null); showToast('Restart timed out — check server', 'warn', 8000); restartWatcher=null }, timeoutMs) }
+function auth(){const tk=localStorage.getItem('token');return tk?{ Authorization: 'Bearer '+tk }:{}}
 function urlInst(u){if(!activeInstance) return u;return u+(u.includes('?')?'&':'?')+'inst='+encodeURIComponent(activeInstance)}
 function urlName(u){if(!activeInstance) return u;return u+(u.includes('?')?'&':'?')+'name='+encodeURIComponent(activeInstance)}
 function apiFetch(url,opt){const o=opt||{};o.headers={...(o.headers||{}),...auth()};return fetch(url,o)}
@@ -16,8 +39,16 @@ function apiUpload(url,fd,onp,opts){return new Promise((resolve,reject)=>{const 
 function apiUploadRaw(url,blob,onp,opts){return new Promise((resolve,reject)=>{const x=new XMLHttpRequest();x.open('POST',url);const h=auth();Object.keys(h).forEach(k=>x.setRequestHeader(k,h[k]));x.setRequestHeader('Content-Type','application/octet-stream');let last=Date.now();x.upload.onprogress=e=>{if(e.lengthComputable&&onp)onp(Math.round(e.loaded*100/e.total));last=Date.now()};let stallTimer=null;if(opts&&opts.stallMs){stallTimer=setInterval(()=>{if(Date.now()-last>opts.stallMs){try{x.abort()}catch{}}},opts.stallMs)};if(opts&&opts.timeoutMs){setTimeout(()=>{try{x.abort()}catch{}},opts.timeoutMs)};x.onload=()=>{if(stallTimer)clearInterval(stallTimer);resolve({ok:x.status>=200&&x.status<300,status:x.status,body:x.responseText})};x.onerror=()=>{if(stallTimer)clearInterval(stallTimer);reject(new TypeError('network_error'))};x.send(blob)})}
 let activeInstance=null
 const serverStatusEls=new Map()
-function connectWS(){ws=new WebSocket(`ws://${location.host}`);ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='console'){const inst=m.payload.instance||null;if(!activeInstance||inst===activeInstance){appendConsole(m.payload.line)}}if(m.type==='status'){const inst=m.payload.instance||null;const st=(m.payload.status||m.payload)||{};if(!inst||inst===activeInstance){updateStatus(st)}const el=inst?serverStatusEls.get(inst):null;if(el){const txt=`${st.online?'Online':'Offline'}${st.crashed?' (crashed)':''}`;el.textContent=txt;el.className='status-pill '+(st.crashed?'status-crashed':(st.online?'status-online':'status-offline'))}}if(m.type==='metrics'){const inst=m.payload.instance||null;if(!inst||inst===activeInstance){updateMetrics(m.payload.metrics||m.payload)}}if(m.type==='terminal'){appendTerminalLine(m.payload.line)}}}
-function updateStatus(s){el('statusText').textContent=`${s.online?'Online':'Offline'}${s.crashed?' (crashed)':''}`;const b=el('statusBar');b.textContent=el('statusText').textContent;b.className='status-pill '+(s.crashed?'status-crashed':(s.online?'status-online':'status-offline'))}
+function connectWS(){try{const tk = localStorage.getItem('token');const url = `ws://${location.host}${tk?('?token='+encodeURIComponent(tk)) : ''}`;ws=new WebSocket(url);ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='console'){const inst=m.payload.instance||null;if(!activeInstance||inst===activeInstance){appendConsole(m.payload.line)}}if(m.type==='status'){const inst=m.payload.instance||null;const st=(m.payload.status||m.payload)||{};if(!inst||inst===activeInstance){updateStatus(st, inst)}const el=inst?serverStatusEls.get(inst):null;if(el){const txt=`${st.online?'Online':'Offline'}${st.crashed?' (crashed)':''}`;el.textContent=txt;el.className='status-pill '+(st.crashed?'status-crashed':(st.online?'status-online':'status-offline'))}}if(m.type==='metrics'){const inst=m.payload.instance||null;if(!inst||inst===activeInstance){updateMetrics(m.payload.metrics||m.payload)}}if(m.type==='terminal'){appendTerminalLine(m.payload.line)}}}catch(e){console.warn('websocket failed',e)}}
+function updateStatus(s, inst){const txt=`${s.online?'Online':'Offline'}${s.crashed?' (crashed)':''}`;if(el('statusText')) el('statusText').textContent=txt;const b=el('statusBar');if(b){b.textContent=txt;b.className='status-pill '+(s.crashed?'status-crashed':(s.online?'status-online':'status-offline'))}const hb=el('headerStatus');if(hb){hb.textContent=txt;hb.className='status-pill '+(s.crashed?'status-crashed':(s.online?'status-online':'status-offline'))}
+  // Reflect restart phases and clear when online
+  try{
+    if (s.stopping) { setActionPhase('restart', 'Stopping…') }
+    else if (s.starting) { setActionPhase('restart', 'Starting…') }
+    if (actionState.restart && s.online){ setActionLoading('restart', false); setActionPhase('restart', null); showToast('Server is online', 'success', 4000); if(restartWatcher){ clearTimeout(restartWatcher); restartWatcher=null } }
+    if (actionState.restart && s.crashed){ setActionLoading('restart', false); setActionPhase('restart', null); showToast('Server crashed during restart', 'danger', 8000); if(restartWatcher){ clearTimeout(restartWatcher); restartWatcher=null } }
+  }catch(e){}
+}
 async function loadStatus(){const r=await apiFetch(urlName('/api/status'));const j=await r.json();activeInstance=j.instance||activeInstance;updateStatus(j.status);updateMetrics(j.metrics);updateActiveHeader()}
 function stripAnsi(s){return s.replace(/\x1b\[[0-9;]*m/g,'')}
 function classifySeverity(sev,line){const s=(sev||'').toLowerCase();const L=line||'';if(s.includes('error')||L.includes('ERROR'))return'log-error';if(s.includes('warn')||L.includes('WARN'))return'log-warn';if(s.includes('debug'))return'log-debug';if(s.includes('info'))return'log-info';if(L.includes('WRAPPER'))return'log-system';return'log-info'}
@@ -31,8 +62,10 @@ el('consoleJumpLast').onclick=()=>{const c=el('consoleOut');if(c)c.scrollTop=c.s
 el('consoleStart').onclick=()=>apiFetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:activeInstance})})
 el('consoleStop').onclick=()=>apiFetch('/api/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:activeInstance})})
 el('consoleKill').onclick=()=>apiFetch('/api/kill',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:activeInstance})})
+el('consoleRestart').onclick=async()=>{ try{ const ok = await showConfirm('Restart the active server?'); if(!ok) return; setActionLoading('restart',true); setActionPhase('restart','Stopping…'); const r = await apiFetch('/api/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:activeInstance})}); if(r.ok){ showToast('Restart requested','info',5000); waitForOnline(60*1000); } else { showToast('Restart failed','danger',5000); setActionLoading('restart',false); setActionPhase('restart', null) } }catch(e){ showToast('Network error during restart','danger',5000); setActionLoading('restart',false); setActionPhase('restart', null) } }
 el('startBtn').onclick=()=>apiFetch('/api/start',{method:'POST'})
 el('stopBtn').onclick=()=>apiFetch('/api/stop',{method:'POST'})
+el('restartBtn').onclick=async()=>{ try{ const ok = await showConfirm('Restart the server?'); if(!ok) return; setActionLoading('restart',true); setActionPhase('restart','Stopping…'); const r = await apiFetch('/api/restart',{method:'POST'}); if(r.ok){ showToast('Restart requested','info',5000); waitForOnline(60*1000); } else { showToast('Restart failed','danger',5000); setActionLoading('restart',false); setActionPhase('restart', null) } }catch(e){ showToast('Network error during restart','danger',5000); setActionLoading('restart',false); setActionPhase('restart', null) } }
 el('killBtn').onclick=()=>apiFetch('/api/kill',{method:'POST'})
 async function loadConsoleTail(){const r=await apiFetch(urlName('/api/console/tail'));const j=await r.json();j.lines.forEach(appendConsole)}
 async function loadConsoleHistory(){const r=await apiFetch(urlName('/api/console/history?lines=500'));if(r.ok){const j=await r.json();el('consoleOut').innerHTML='';el('logsPreview').innerHTML='';j.lines.forEach(appendConsole);const c=el('consoleOut');c.scrollTop=c.scrollHeight}else{await loadConsoleTail()}}

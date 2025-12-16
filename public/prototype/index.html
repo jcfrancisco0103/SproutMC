@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SproutMC — Prototype Dashboard</title>
+  <link rel="stylesheet" href="/prototype/styles.css">
+</head>
+<body>
+  <div id="app" data-theme="dark">
+    <aside class="sidebar" role="navigation" aria-label="Main navigation">
+      <div class="logo-row">
+        <div class="logo">SproutMC</div>
+        <button id="collapseSidebar" class="btn small" aria-pressed="false" title="Toggle sidebar">≡</button>
+      </div>
+      <nav>
+        <button class="nav-btn active"><span class="icon">🏠</span><span class="label">Dashboard</span></button>
+        <button class="nav-btn"><span class="icon">🖥</span><span class="label">Console</span></button>
+        <button class="nav-btn"><span class="icon">📁</span><span class="label">Files</span></button>
+        <button class="nav-btn"><span class="icon">🔌</span><span class="label">Plugins</span></button>
+        <button class="nav-btn"><span class="icon">🕑</span><span class="label">Tasks</span></button>
+        <button class="nav-btn"><span class="icon">⚙️</span><span class="label">Settings</span></button>
+      </nav>
+      <div class="sidebar-footer">
+        <small>Active: <strong id="activeInstance">default</strong></small>
+
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="top-left">
+          <h1 id="pageTitle">Dashboard</h1>
+          <div class="pill status online">Online</div>
+        </div>
+        <div class="top-right">
+          <button class="btn primary" id="startBtn">Start</button>
+          <button class="btn" id="stopBtn">Stop</button>
+          <button class="btn" id="restartBtn">Restart</button>
+          <div class="user">Admin ▾</div>
+        </div>
+      </header>
+
+      <section class="content grid">
+        <div class="col-2">
+          <div class="card metrics">
+            <div class="metric"><small>CPU</small><strong id="cpuVal">12.4%</strong></div>
+            <div class="metric"><small>RAM</small><strong id="ramVal">2.3 GB</strong></div>
+            <div class="metric"><small>Disk</small><strong id="diskVal">23.4 GB</strong></div>
+            <div class="metric"><small>Players</small><strong id="playersVal">3</strong></div>
+          </div>
+
+          <div class="card console-preview" aria-live="polite">
+            <div class="card-head">
+              <h3>Console (live)</h3>
+              <div class="actions">
+                <input id="previewFilter" class="tiny-input" placeholder="filter..." aria-label="Filter console preview" />
+                <button class="btn small" id="togglePause" aria-pressed="false" title="Pause auto-scroll">⏸</button>
+                <button class="btn small" id="openConsole" title="Open full console">Open</button>
+              </div>
+            </div>
+            <div class="logs" id="consoleOut" role="log" aria-live="off"></div>
+            <div class="console-input">
+              <input id="quickCmd" placeholder="Type command..." />
+              <button class="btn small" id="sendQuick">Send</button>
+            </div>
+          </div>
+
+          <div class="card backups">
+            <h3>Backups</h3>
+            <ul id="backupList">
+              <li>backup-1686789012.zip <button class="btn tiny">Download</button></li>
+              <li>backup-1686700000.zip <button class="btn tiny">Restore</button></li>
+            </ul>
+          </div>
+        </div>
+
+        <aside class="col-1">
+          <div class="card chart" id="cpuChartHolder">
+            <h4>CPU (last 3 min)</h4>
+            <canvas id="cpuChart" height="120"></canvas>
+          </div>
+
+          <div class="card tasks">
+            <h4>Scheduled Tasks</h4>
+            <ul>
+              <li>Every day 00:00 — Backup <button class="btn tiny">Run</button></li>
+              <li>Mon 03:00 — Restart <button class="btn tiny">Run</button></li>
+            </ul>
+          </div>
+        </aside>
+      </section>
+
+      <footer class="footer">
+        <small>Prototype — visit <a href="/">/ (app)</a> to return</small>
+      </footer>
+    </main>
+  </div>
+
+  <div id="consoleModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Console">
+    <div class="modal-body">
+      <div class="modal-head">
+        <h3>Console</h3>
+        <div class="modal-actions">
+          <input id="consoleSearch" class="tiny-input" placeholder="Search logs..." aria-label="Search logs" />
+          <div class="filters" role="toolbar" aria-label="Log severity filters">
+            <button class="btn tiny filter-btn active" data-sev="all">All</button>
+            <button class="btn tiny filter-btn" data-sev="info">Info</button>
+            <button class="btn tiny filter-btn" data-sev="warn">Warn</button>
+            <button class="btn tiny filter-btn" data-sev="error">Error</button>
+          </div>
+          <button id="clearConsole" class="btn tiny" title="Clear visible logs">Clear</button>
+          <button id="closeConsole" class="btn small">Close</button>
+        </div>
+      </div>
+      <div class="console-full">
+        <div class="console-toolbar">
+          <button id="toggleAutoscroll" class="btn tiny" aria-pressed="true" title="Toggle autoscroll">Autoscroll</button>
+          <button id="pauseBtn" class="btn tiny" aria-pressed="false" title="Pause appending logs">Pause</button>
+        </div>
+        <div class="console-log" id="consoleFullOut" role="log" aria-live="off" tabindex="0"></div>
+        <div class="console-controls">
+          <input id="cmdInput" placeholder="Enter command" aria-label="Enter command"/>
+          <button id="cmdSend" class="btn primary">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/prototype/app.js"></script>
+</body>
+</html>

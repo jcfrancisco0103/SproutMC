@@ -3,3 +3,4 @@ logs/
 *.log
 data/
 node_modules/
+data/audit.log
