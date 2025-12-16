@@ -1,0 +1,55 @@
+<!-- Public overview site — separate from wrapper UI -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SproutMC — Overview</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="overview-root" data-server-host="play.sproutmc.example">
+
+    <header class="site-header">
+      <h1>SproutMC</h1>
+      <p class="tagline">A friendly Minecraft server — play, build, and grow 🌱</p>
+      <a class="btn" href="#join">Join Server</a>
+    </header>
+
+    <main>
+      <section id="about" class="card">
+        <h2>About</h2>
+        <p>SproutMC is a community-focused Minecraft server with creative builds, friendly staff, and regular events.</p>
+      </section>
+
+      <section id="features" class="card">
+        <h2>Features</h2>
+        <ul>
+          <li>Custom spawn & worlds</li>
+          <li>Active events and minigames</li>
+          <li>Protective plugins and anti-grief</li>
+        </ul>
+      </section>
+
+      <section id="status" class="card">
+        <h2>Server Status <button id="refresh-servers" class="btn small" style="margin-left:8px">Refresh</button></h2>
+        <div id="server-status">
+          <div id="server-global-status">Checking status…</div>
+          <ul id="servers-list" style="list-style:none;padding:0;margin:0.6rem 0 0 0;display:grid;gap:8px"></ul>
+        </div>
+      </section>
+      <section id="join" class="card">
+        <h2>How to Join</h2>
+        <p>Connect to <code>play.sproutmc.example</code> (replace with real address).</p>
+      </section>
+    </main>
+
+    <footer>
+      <p>SproutMC — © <span id="year"></span></p>
+    </footer>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

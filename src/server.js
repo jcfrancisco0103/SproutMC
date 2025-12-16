@@ -57,6 +57,7 @@ let metricsCache = { cpu: null, memory: null, diskUsedBytes: null, tps: null, pl
 let diskSizeLastTs = 0
 let diskSizeComputing = false
 const playersOnline = new Set()
+const playersMap = new Map() // per-instance player sets: name -> Set()
 let restartPending = false
 let terminalBuffer = []
 
@@ -111,6 +112,12 @@ function appendConsole(line) {
     m = line.match(/\]:\s(.+?)\sleft the server/i)
     if (m) playersOnline.delete(m[1])
     metricsCache.players = { count: playersOnline.size, list: Array.from(playersOnline) }
+    // sync to per-instance players map for the active instance
+    try {
+      const name = activeInstanceName()
+      if (name) playersMap.set(name, new Set(Array.from(playersOnline)))
+      if (name) broadcast('players', { instance: name, players: Array.from(playersOnline) })
+    } catch (e) {}
     broadcast('metrics', metricsCache)
   } catch {}
   broadcast('console', { instance: activeInstanceName()||'root', line })
@@ -310,6 +317,66 @@ app.get('/api/status', requireAuth, (req, res) => {
   const name = req.query.name || activeInstanceName()
   const st = statusMap.get(name) || { online:false, crashed:false, starting:false, stopping:false }
   res.json({ status: st, metrics: metricsCache, instance: name })
+})
+
+// Public overview status proxy (no auth required)
+app.get('/api/overview/status', (req, res) => {
+  try {
+    const host = req.query.host || 'play.sproutmc.example'
+    const url = `https://api.mcsrvstat.us/2/${encodeURIComponent(host)}`
+    https.get(url, (proxRes) => {
+      let buff = ''
+      proxRes.on('data', (d) => buff += d.toString())
+      proxRes.on('end', () => {
+        try {
+          const json = JSON.parse(buff || '{}')
+          res.json({ ok: true, host, data: json })
+        } catch (e) {
+          res.status(502).json({ ok: false, error: 'invalid_upstream_response' })
+        }
+      })
+    }).on('error', (err) => {
+      res.status(502).json({ ok: false, error: 'upstream_error' })
+    })
+  } catch (e) { res.status(500).json({ ok: false, error: 'internal_error' }) }
+})
+
+// Also expose the servers listing on the wrapper app so requests from the wrapper origin work
+app.get('/api/overview/servers', (req, res) => {
+  try {
+    const instances = listInstances()
+    const servers = instances.map(name => {
+      const st = statusMap.get(name) || { online: false, crashed: false, starting: false, stopping: false }
+      const playersSet = playersMap.get(name) || new Set()
+      return { name, status: st, players: playersSet.size }
+    })
+    res.json({ ok: true, servers })
+  } catch (e) { res.status(500).json({ ok: false, error: 'internal_error' }) }
+})
+
+app.get('/api/overview/players', (req, res) => {
+  try {
+    const name = req.query.name
+    if (!name) return res.status(400).json({ ok: false, error: 'missing_name' })
+    const set = playersMap.get(name) || new Set()
+    res.json({ ok: true, name, players: Array.from(set) })
+  } catch (e) { res.status(500).json({ ok: false, error: 'internal_error' }) }
+})
+
+// Overview info endpoint (reports whether overview server is enabled and which port it runs on)
+app.get('/api/overview/info', (req, res) => {
+  try {
+    res.json({ enabled: OVERVIEW_ENABLED, port: OVERVIEW_PORT, url: `http://localhost:${OVERVIEW_PORT}` })
+  } catch (e) { res.status(500).json({ ok: false, error: 'internal_error' }) }
+})
+
+// Public endpoint: wrapper's view of the server (no auth) — minimal, non-sensitive
+app.get('/api/overview/wrapper-status', (req, res) => {
+  try {
+    const name = activeInstanceName()
+    const st = statusMap.get(name) || status
+    res.json({ ok: true, instance: name, status: st, metrics: metricsCache })
+  } catch (e) { res.status(500).json({ ok: false, error: 'internal_error' }) }
 })
 
 app.get('/api/players/online', requireAuth, (req, res) => {
@@ -1090,6 +1157,55 @@ app.post('/api/tasks/delete', requireAuth, (req, res) => {
 })
 
 const PORT = process.env.PORT || 3000
+
+// Optional overview static server (runs in parallel and is intentionally isolated)
+// Configure via environment variables:
+//  - OVERVIEW_ENABLED (set to 'false' to disable; default: enabled)
+//  - OVERVIEW_PORT (port for the overview site; default: 3005)
+const OVERVIEW_ENABLED = (process.env.OVERVIEW_ENABLED === 'false') ? false : true
+const OVERVIEW_PORT = process.env.OVERVIEW_PORT ? Number(process.env.OVERVIEW_PORT) : 3005
+if (OVERVIEW_ENABLED) {
+  if (OVERVIEW_PORT === Number(process.env.PORT || 3000)) {
+    console.warn(`[WARN] OVERVIEW_PORT (${OVERVIEW_PORT}) equals main PORT (${process.env.PORT || 3000}). This may cause a conflict.`)
+  }
+  try {
+    const overviewApp = express()
+    // Health endpoint for the overview server
+    overviewApp.get('/health', (req, res) => res.json({ ok: true, ts: Date.now(), port: OVERVIEW_PORT }))
+
+    // Overview servers listing (public)
+    overviewApp.get('/api/overview/servers', (req, res) => {
+      try {
+        const instances = listInstances()
+        const servers = instances.map(name => {
+          const st = statusMap.get(name) || { online: false, crashed: false, starting: false, stopping: false }
+          const playersSet = playersMap.get(name) || new Set()
+          return { name, status: st, players: playersSet.size }
+        })
+        res.json({ ok: true, servers })
+      } catch (e) { res.status(500).json({ ok: false, error: 'internal_error' }) }
+    })
+
+    overviewApp.get('/api/overview/players', (req, res) => {
+      try {
+        const name = req.query.name
+        if (!name) return res.status(400).json({ ok: false, error: 'missing_name' })
+        const set = playersMap.get(name) || new Set()
+        res.json({ ok: true, name, players: Array.from(set) })
+      } catch (e) { res.status(500).json({ ok: false, error: 'internal_error' }) }
+    })
+
+    // Serve only the overview folder to keep it isolated from the wrapper app
+    overviewApp.use(express.static(path.resolve('public/overview'), { index: ['index.html'] }))
+    const overviewServer = http.createServer(overviewApp)
+    overviewServer.listen(OVERVIEW_PORT, () => {
+      console.log(`Overview site listening on http://localhost:${OVERVIEW_PORT}`)
+    })
+  } catch (e) {
+    console.error('Failed to start overview server:', e)
+  }
+}
+
 server.listen(PORT, () => {
   console.log(`Wrapper listening on http://localhost:${PORT}`)
 })
@@ -1226,6 +1342,39 @@ function appendConsoleFor(name, line){
     buf.push(line)
     while (buf.length>1000) buf.shift()
     consoleMap.set(name, buf)
+
+    // Per-instance player tracking
+    try {
+      let set = playersMap.get(name)
+      if (!set) { set = new Set(); playersMap.set(name, set) }
+      let m = line.match(/There are.*online:?\s*(.*)/i)
+      if (m) {
+        const names = (m[1]||'').split(',').map(s=>s.trim()).filter(Boolean)
+        set.clear(); names.forEach(n=>{ if (n) set.add(n) })
+      }
+      m = line.match(/Players\s+online:?\s*(.*)/i)
+      if (m) {
+        const names = (m[1]||'').split(',').map(s=>s.trim()).filter(Boolean)
+        set.clear(); names.forEach(n=>{ if (n) set.add(n) })
+      }
+      m = line.match(/Online\s+players:?\s*(.*)/i)
+      if (m) {
+        const names = (m[1]||'').split(',').map(s=>s.trim()).filter(Boolean)
+        set.clear(); names.forEach(n=>{ if (n) set.add(n) })
+      }
+      m = line.match(/\]:\s(.+?)\sjoined the game/i)
+      if (m) set.add(m[1])
+      m = line.match(/\]:\s(.+?)\sleft the game/i)
+      if (m) set.delete(m[1])
+      m = line.match(/\]:\s(.+?)\sjoined the server/i)
+      if (m) set.add(m[1])
+      m = line.match(/\]:\s(.+?)\sleft the server/i)
+      if (m) set.delete(m[1])
+
+      // Broadcast players update for the instance
+      broadcast('players', { instance: name, players: Array.from(set) })
+    } catch (e) {}
+
     broadcast('console', { instance: name, line })
   } catch {}
 }
@@ -1252,8 +1401,8 @@ function startInstance(name){
   appendConsoleFor(name,'[WRAPPER] Starting server')
   p.stdout.on('data', d=>{d.toString().split(/\r?\n/).forEach(l=>{if(l)appendConsoleFor(name,l)})})
   p.stderr.on('data', d=>{d.toString().split(/\r?\n/).forEach(l=>{if(l)appendConsoleFor(name,l)})})
-  p.on('spawn', ()=>{statusMap.set(name,{ online:true, crashed:false, starting:false, stopping:false});broadcast('status',{ instance:name, status:statusMap.get(name) })})
-  p.on('exit',(code,signal)=>{procMap.delete(name);const st=statusMap.get(name)||{online:false,stopping:false};const crashed=!st.stopping;statusMap.set(name,{ online:false, crashed, starting:false, stopping:false});appendConsoleFor(name,`[WRAPPER] Server exited code=${code} signal=${signal}`);broadcast('status',{ instance:name, status:statusMap.get(name) })})
+  p.on('spawn', ()=>{statusMap.set(name,{ online:true, crashed:false, starting:false, stopping:false});playersMap.set(name,new Set());broadcast('status',{ instance:name, status:statusMap.get(name) })})
+  p.on('exit',(code,signal)=>{procMap.delete(name);const st=statusMap.get(name)||{online:false,stopping:false};const crashed=!st.stopping;statusMap.set(name,{ online:false, crashed, starting:false, stopping:false});playersMap.delete(name);appendConsoleFor(name,`[WRAPPER] Server exited code=${code} signal=${signal}`);broadcast('status',{ instance:name, status:statusMap.get(name) })})
 }
 
 function stopInstance(name){const p=procMap.get(name);if(!p)return;const st=statusMap.get(name)||{stopping:false};if(st.stopping)return;statusMap.set(name,{...st,stopping:true});appendConsoleFor(name,'[WRAPPER] Saving worlds before stop');try{p.stdin.write('save-all'+os.EOL)}catch{}setTimeout(()=>{try{p.stdin.write('stop'+os.EOL)}catch{}},1500);setTimeout(()=>{if(procMap.get(name)) try{p.kill('SIGINT')}catch{}},30000)}

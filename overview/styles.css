@@ -1,0 +1,3 @@
+/* Migrated to public/overview — keep minimal fallback */
+body{background:#011202;color:#dfffe0;font-family:system-ui,Arial;padding:2rem}
+.note{background:#042b15;padding:1rem;border-radius:8px;border:1px solid rgba(255,255,255,0.02)}

@@ -4,7 +4,8 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "serve:overview": "npx serve public/overview -l 8081 --no-clipboard"
   },
   "dependencies": {
     "archiver": "^6.0.1",
