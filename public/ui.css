@@ -27,6 +27,15 @@ body{
 /* Topbar */
 .topbar{display:flex;justify-content:space-between;align-items:center;padding:10px 18px;border-bottom:1px solid rgba(255,255,255,0.04);background:linear-gradient(180deg, rgba(0,0,0,0.36), rgba(0,0,0,0.12));position:sticky;top:0;z-index:30;backdrop-filter: blur(4px);color:var(--muted-text)}
 .topbar .actions{display:flex;gap:10px;align-items:center}
+
+/* Active instance dropdown (per-tab) */
+.active-instance-wrapper{position:relative;display:inline-block}
+.active-instance-dropdown{position:absolute;right:0;top:calc(100% + 8px);background:linear-gradient(180deg,rgba(0,0,0,0.9),rgba(0,0,0,0.8));border:1px solid rgba(255,255,255,0.04);padding:8px;border-radius:8px;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,0.5);z-index:40}
+.active-instance-dropdown .item{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:6px;cursor:pointer}
+.active-instance-dropdown .item:hover{background:rgba(255,255,255,0.02)}
+.active-instance-dropdown .item .name{font-weight:700;color:#eaffea}
+.active-instance-dropdown .item .actions button{margin-left:6px}
+.hidden{display:none}
 .status-pill{padding:6px 10px;border-radius:999px;font-size:13px;background:rgba(255,255,255,0.02);color:var(--muted-text);border:1px solid rgba(255,255,255,0.03)}
 .status-pill.status-online{background:rgba(43,189,82,0.12);color:var(--accent)}
 .status-pill.status-crashed{background:rgba(239,68,68,0.08);color:#ffbfb9}

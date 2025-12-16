@@ -340,11 +340,8 @@ function renderActiveSelector(){
         // close dropdown in current tab when the link is clicked
         nm.addEventListener('click', ()=>{ try{ dd.classList.add('hidden'); btn.setAttribute('aria-expanded','false'); }catch{} });
         row.appendChild(nm);
-        const actions = document.createElement('span'); actions.className = 'actions';
-        const setBtn = document.createElement('button'); setBtn.className='btn small'; setBtn.textContent='Set Global';
-        setBtn.onclick = async (ev) => { ev.stopPropagation(); if(!confirm('Set this instance as the global active instance for the wrapper?')) return; const r2 = await apiFetch('/api/instances/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})}); if(r2.ok){ showToast('Active instance set globally','success'); loadServers(); } else { showToast('Failed to set global active','warn'); } };
-        actions.appendChild(setBtn);
-        row.appendChild(actions);
+        // 'Set Global' removed from dropdown; use the Servers page to change the wrapper-wide active instance if needed.
+
         dd.appendChild(row);
       })
     }catch(e){ dd.innerHTML = '<div style="padding:8px">Error</div>' }

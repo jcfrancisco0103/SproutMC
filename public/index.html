@@ -42,7 +42,10 @@
           <div class="pill status" id="headerStatus">--</div>
         </div>
         <div class="topbar actions">
-          <span id="activeInstanceHeader"></span>
+          <div id="activeInstanceWrapper" class="active-instance-wrapper">
+            <button id="activeInstanceBtn" class="btn small" aria-expanded="false">Active: <span id="activeInstanceLabel">(none)</span> ▾</button>
+            <div id="activeInstanceDropdown" class="active-instance-dropdown hidden" role="menu" aria-hidden="true"></div>
+          </div>
           <button id="updatesBtn">Updates</button>
 
           <button id="logoutBtn" class="btn small">Logout</button>

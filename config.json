@@ -1,7 +1,7 @@
 {
-  "instanceRoot": "instances/default",
+  "instanceRoot": "/root/SproutMC/instances/default",
   "javaPath": "java",
-  "serverJar": "instances/default/server.jar",
+  "serverJar": "/root/SproutMC/instances/default/server.jar",
   "jvmArgs": [
     "-Xms1G",
     "-Xmx24G"
