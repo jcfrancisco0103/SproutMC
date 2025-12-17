@@ -198,7 +198,7 @@ async function loadWorlds(){showLoading();const r=await apiFetch('/api/worlds');
 el('saveAll').onclick=()=>apiFetch('/api/world/save',{method:'POST'})
 async function loadProps(){const c=el('propsForm');if(!c)return;const r=await apiFetch('/api/settings/server-properties');const j=await r.json();c.innerHTML='';Object.entries(j.properties||{}).forEach(([k,v])=>{const row=document.createElement('div');row.className='row';const a=document.createElement('input');a.value=k;a.disabled=true;const b=document.createElement('input');b.value=v;b.dataset.key=k;row.appendChild(a);row.appendChild(b);c.appendChild(row)})}
 const commonProps=[
-  ['motd','SproutMC Server'],
+  ['motd','HoneyBee Server'],
   ['difficulty','easy'],
   ['max-players','20'],
   ['white-list','false'],

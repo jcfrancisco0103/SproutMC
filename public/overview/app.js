@@ -7,7 +7,7 @@
   const statusEl = document.getElementById('server-status');
   if (!statusEl || !root) return;
 
-  const host = root.getAttribute('data-server-host') || 'play.sproutmc.example';
+  const host = root.getAttribute('data-server-host') || 'play.honeybee.example';
 
   function badgeHtml(text, color){ return `<span style="padding:3px 8px;border-radius:8px;background:${color};font-weight:700;color:#021101">${text}</span>` }
 

@@ -1,7 +1,7 @@
 /* Minimal UI layer adapted from prototype for main app */
 :root{
-  --bg: linear-gradient(180deg, #07260b 0%, #00130a 45%, #000000 100%);
-  --surface:#0b0f0d; --muted:#07120f; --text:#e7f3ea; --accent:#2bbd52; --danger:#ef4444; --muted-text:#9aa9a0; --shadow:0 8px 24px rgba(0,0,0,0.6);
+  --bg: linear-gradient(180deg, #2b1b02 0%, #150d03 45%, #000000 100%);
+  --surface:#12100a; --muted:#1a1409; --text:#fff8e6; --accent:#f6c945; --danger:#ef4444; --muted-text:#e4d6a5; --shadow:0 8px 24px rgba(0,0,0,0.6);
 }
 body{
   background:var(--bg);
@@ -37,8 +37,8 @@ body{
 .active-instance-dropdown .item .actions button{margin-left:6px}
 .hidden{display:none}
 .status-pill{padding:6px 10px;border-radius:999px;font-size:13px;background:rgba(255,255,255,0.02);color:var(--muted-text);border:1px solid rgba(255,255,255,0.03)}
-.status-pill.status-online{background:rgba(43,189,82,0.12);color:var(--accent)}
-.status-pill.status-crashed{background:rgba(239,68,68,0.08);color:#ffbfb9}
+.status-pill.status-online{background:rgba(246,201,69,0.18);color:var(--accent)}
+.status-pill.status-crashed{background:rgba(239,68,68,0.12);color:#ffd0c9}
 /* Theme button visuals */
 .theme-icon{font-size:16px;line-height:1;display:inline-block}
 .theme-text{font-size:13px;margin-left:6px;color:var(--muted-text)}
@@ -54,9 +54,9 @@ body{
 /* Toast notifications */
 .toast{position:fixed;right:18px;top:18px;z-index:4000;padding:10px 14px;border-radius:10px;background:rgba(0,0,0,0.7);color:var(--text);box-shadow:0 8px 24px rgba(0,0,0,0.6);transition:transform .18s ease,opacity .18s ease;opacity:1}
 .toast.hidden{opacity:0;transform:translateY(-8px);pointer-events:none}
-.toast-success{background:linear-gradient(90deg,#1b4d26,#12381b)}
+.toast-success{background:linear-gradient(90deg,#6a4b0e,#4b330a)}
 .toast-error{background:linear-gradient(90deg,#5a1515,#3a0f0f)}
-.toast-warn{background:linear-gradient(90deg,#4d3811,#2a220a)}
+.toast-warn{background:linear-gradient(90deg,#8a6a1a,#5b4710)}
 
 
 /* Cards */

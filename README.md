@@ -1,4 +1,4 @@
-# SproutMC Wrapper
+# HoneyBee Wrapper
 
 A lightweight web UI to manage a Minecraft server: start/stop, live console, files, plugins, backups, scheduled tasks, worlds management, settings, and metrics — all from your browser.
 
@@ -22,7 +22,8 @@ A lightweight web UI to manage a Minecraft server: start/stop, live console, fil
 
 ## Quick Start (Linux/macOS/Windows)
 1. Clone: `git clone https://github.com/jcfrancisco0103/SproutMC.git`
-2. Enter: `cd SproutMC`
+2. Enter: `cd SproutMC`  
+  Note: The project UI and site branding is now HoneyBee.
 3. Run: `npm start`
 4. Open `http://localhost:3000`
 5. Go to Settings and configure:
@@ -45,7 +46,7 @@ A lightweight web UI to manage a Minecraft server: start/stop, live console, fil
 Create `/etc/systemd/system/sproutmc.service`:
 ```
 [Unit]
-Description=SproutMC Wrapper
+Description=HoneyBee Wrapper
 After=network.target
 
 [Service]
@@ -71,8 +72,8 @@ mkdir -p ~/.config/autostart
 cat > ~/.config/autostart/sproutmc.desktop <<EOF
 [Desktop Entry]
 Type=Application
-Name=SproutMC UI
-Comment=Open SproutMC Web UI
+Name=HoneyBee UI
+Comment=Open HoneyBee Web UI
 Exec=sh -c 'sleep 5; xdg-open http://localhost:3000'
 X-GNOME-Autostart-enabled=true
 EOF

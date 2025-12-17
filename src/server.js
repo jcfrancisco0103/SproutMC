@@ -322,7 +322,7 @@ app.get('/api/status', requireAuth, (req, res) => {
 // Public overview status proxy (no auth required)
 app.get('/api/overview/status', (req, res) => {
   try {
-    const host = req.query.host || 'play.sproutmc.example'
+    const host = req.query.host || 'play.honeybee.example'
     const url = `https://api.mcsrvstat.us/2/${encodeURIComponent(host)}`
     https.get(url, (proxRes) => {
       let buff = ''
@@ -854,7 +854,7 @@ app.get('/api/update/check', requireAuth, (req, res) => {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'))
     const url = 'https://api.github.com/repos/jcfrancisco0103/SproutMC/releases/latest'
-    const opts = { headers: { 'User-Agent': 'SproutMC-Wrapper' } }
+    const opts = { headers: { 'User-Agent': 'HoneyBee-Wrapper' } }
     https.get(url, opts, (r) => {
       let data = ''
       r.on('data', d => data += d.toString())
@@ -1300,7 +1300,7 @@ app.post('/api/instances/create', requireAuth, (req,res)=>{
     if(fs.existsSync(dir)) return res.status(400).json({ error:'exists' })
     fse.ensureDirSync(dir)
     fse.ensureDirSync(path.join(dir,'plugins'))
-    fs.writeFileSync(path.join(dir,'server.properties'),'motd=New SproutMC Server'+os.EOL)
+    fs.writeFileSync(path.join(dir,'server.properties'),'motd=New HoneyBee Server'+os.EOL)
     audit(req.user.username,'instance_create',{ name })
     res.json({ ok:true })
   } catch { res.status(500).json({ error:'create_failed' }) }
