@@ -11,6 +11,14 @@ fi
 apt update
 DEBIAN_FRONTEND=noninteractive apt install -y git openjdk-17-jre-headless tmux curl
 
+if ! command -v gpg >/dev/null 2>&1; then
+  DEBIAN_FRONTEND=noninteractive apt install -y gnupg
+fi
+curl -SsL https://playit-cloud.github.io/ppa/key.gpg | gpg --dearmor | tee /etc/apt/trusted.gpg.d/playit.gpg >/dev/null
+echo "deb [signed-by=/etc/apt/trusted.gpg.d/playit.gpg] https://playit-cloud.github.io/ppa/data ./" | tee /etc/apt/sources.list.d/playit-cloud.list
+apt update
+DEBIAN_FRONTEND=noninteractive apt install -y playit
+
 if command -v node >/dev/null 2>&1; then
   NODE_MAJOR=$(node -v | sed 's/v//' | awk -F. '{print $1}')
 else
