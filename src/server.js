@@ -576,9 +576,23 @@ app.get('/api/fs/read', requireAuth, (req, res) => {
     if (ext === '.jar') return res.status(400).json({ error: 'not_editable' })
     const st = fs.statSync(p)
     if (st.size > 5 * 1024 * 1024) return res.status(413).json({ error: 'too_large' })
-    const content = fs.readFileSync(p, 'utf8')
-    res.json({ path: path.relative(rootForInstance(req.query.inst), p), size: st.size, content })
-  } catch { res.status(400).json({ error: 'bad_path' }) }
+    try {
+      const content = fs.readFileSync(p, 'utf8')
+      res.json({ path: path.relative(rootForInstance(req.query.inst), p), size: st.size, content })
+    } catch (e) {
+      // If file can't be read as UTF-8, try with latin1 fallback
+      try {
+        const buffer = fs.readFileSync(p)
+        const content = buffer.toString('latin1')
+        res.json({ path: path.relative(rootForInstance(req.query.inst), p), size: st.size, content })
+      } catch (e2) {
+        return res.status(400).json({ error: 'read_failed', details: 'Cannot read file content' })
+      }
+    }
+  } catch (e) { 
+    console.error('File read error:', e)
+    res.status(400).json({ error: 'bad_path', details: e.message }) 
+  }
 })
 
 app.post('/api/fs/write', requireAuth, (req, res) => {
@@ -724,10 +738,16 @@ app.post('/api/fs/rename', requireAuth, (req, res) => {
 app.post('/api/fs/delete', requireAuth, (req, res) => {
   try {
     const p = safeResolve(req.body.path, req.body.inst)
+    if (!fs.existsSync(p)) return res.status(404).json({ error: 'not_found' })
+    console.log(`Deleting: ${p}`)
     fse.removeSync(p)
+    console.log(`Successfully deleted: ${p}`)
     audit(req.user.username, 'delete', { path: p })
     res.json({ ok: true })
-  } catch { res.status(400).json({ error: 'bad_path' }) }
+  } catch (e) { 
+    console.error(`Delete failed for path: ${req.body.path}, error:`, e.message)
+    res.status(400).json({ error: 'delete_failed', details: e.message }) 
+  }
 })
 
 app.post('/api/fs/unzip', requireAuth, async (req, res) => {
@@ -737,31 +757,88 @@ app.post('/api/fs/unzip', requireAuth, async (req, res) => {
     if (!fs.existsSync(src)) return res.status(404).json({ error: 'not_found' })
     fse.ensureDirSync(dest)
     const lower = src.toLowerCase()
-    if (lower.endsWith('.zip')) {
-      const zip = new AdmZip(src)
-      zip.extractAllTo(dest, true)
-      audit(req.user.username, 'unzip', { src, dest })
-      return res.json({ ok: true })
-    }
-    if (lower.endsWith('.rar')) {
-      const run = (cmd, args) => new Promise((resolve, reject) => {
-        try {
-          const p = child_process.spawn(cmd, args, { cwd: process.cwd() })
-          p.on('error', reject)
-          p.on('close', code => (code === 0 ? resolve(true) : reject(new Error(`exit_${code}`))))
-        } catch (e) { reject(e) }
-      })
+    
+    const run = (cmd, args) => new Promise((resolve, reject) => {
       try {
-        await run('unrar', ['x', '-o+', '-y', src, dest])
-      } catch (e1) {
-        try { await run('7z', ['x', '-y', src, `-o${dest}`]) }
-        catch (e2) { return res.status(500).json({ error: 'rar_extract_failed' }) }
+        console.log(`Running: ${cmd} ${args.join(' ')} (cwd: ${dest})`)
+        const p = child_process.spawn(cmd, args, { cwd: dest, stdio: 'pipe' })
+        let stdout = ''
+        let stderr = ''
+        p.stdout?.on('data', d => stdout += d.toString())
+        p.stderr?.on('data', d => stderr += d.toString())
+        p.on('error', (err) => {
+          console.error(`Process error: ${err.message}`)
+          reject(err)
+        })
+        p.on('close', (code) => {
+          if (code === 0) {
+            console.log(`Process completed successfully with code ${code}`)
+            resolve(true)
+          } else {
+            console.error(`Process exited with code ${code}, stderr: ${stderr}`)
+            reject(new Error(`exit_${code}: ${stderr}`))
+          }
+        })
+      } catch (e) {
+        console.error(`Spawn error: ${e.message}`)
+        reject(e)
       }
-      audit(req.user.username, 'unrar', { src, dest })
-      return res.json({ ok: true })
+    })
+    
+    try {
+      if (lower.endsWith('.zip')) {
+        try {
+          // Try system unzip first (handles large files better)
+          console.log('Attempting system unzip...')
+          await run('unzip', ['-o', src])
+          console.log('System unzip completed successfully:', src)
+          audit(req.user.username, 'unzip', { src, dest })
+          return res.json({ ok: true, method: 'system_unzip' })
+        } catch (e1) {
+          console.warn('System unzip failed:', e1.message)
+          // Fallback to AdmZip for systems without unzip command
+          try {
+            console.log('Attempting AdmZip fallback...')
+            const zip = new AdmZip(src)
+            zip.extractAllTo(dest, true)
+            console.log('AdmZip extraction completed successfully:', src)
+            audit(req.user.username, 'unzip', { src, dest })
+            return res.json({ ok: true, method: 'adm_zip' })
+          } catch (e2) {
+            console.error('AdmZip extraction failed:', e2)
+            return res.status(500).json({ error: 'unzip_failed', details: e2.message })
+          }
+        }
+      } else if (lower.endsWith('.rar')) {
+        try {
+          console.log('Attempting unrar...')
+          await run('unrar', ['x', '-o+', '-y', src, dest])
+          console.log('Unrar completed successfully:', src)
+          audit(req.user.username, 'unrar', { src, dest })
+          return res.json({ ok: true, method: 'unrar' })
+        } catch (e1) {
+          try {
+            console.log('Attempting 7z fallback...')
+            await run('7z', ['x', '-y', src, `-o${dest}`])
+            console.log('7z extraction completed successfully:', src)
+            audit(req.user.username, 'unrar', { src, dest })
+            return res.json({ ok: true, method: '7z' })
+          } catch (e2) {
+            console.error('RAR extract failed:', e2)
+            return res.status(500).json({ error: 'rar_extract_failed', details: e2.message })
+          }
+        }
+      } else {
+        return res.status(400).json({ error: 'unsupported_archive' })
+      }
+    } catch (e) {
+      console.error('Extraction error:', e)
+      return res.status(500).json({ error: 'extraction_failed', details: e.message })
     }
-    return res.status(400).json({ error: 'unsupported_archive' })
-  } catch { res.status(400).json({ error: 'unzip_failed' }) }
+  } catch (e) { 
+    console.error('Unzip endpoint error:', e)
+    res.status(400).json({ error: 'unzip_failed', details: e.message }) 
+  }
 })
 
 app.get('/api/fs/unzip', requireAuth, async (req, res) => {
@@ -771,31 +848,88 @@ app.get('/api/fs/unzip', requireAuth, async (req, res) => {
     if (!fs.existsSync(src)) return res.status(404).json({ error: 'not_found' })
     fse.ensureDirSync(dest)
     const lower = src.toLowerCase()
-    if (lower.endsWith('.zip')) {
-      const zip = new AdmZip(src)
-      zip.extractAllTo(dest, true)
-      audit(req.user.username, 'unzip', { src, dest })
-      return res.json({ ok: true })
-    }
-    if (lower.endsWith('.rar')) {
-      const run = (cmd, args) => new Promise((resolve, reject) => {
-        try {
-          const p = child_process.spawn(cmd, args, { cwd: process.cwd() })
-          p.on('error', reject)
-          p.on('close', code => (code === 0 ? resolve(true) : reject(new Error(`exit_${code}`))))
-        } catch (e) { reject(e) }
-      })
+    
+    const run = (cmd, args) => new Promise((resolve, reject) => {
       try {
-        await run('unrar', ['x', '-o+', '-y', src, dest])
-      } catch (e1) {
-        try { await run('7z', ['x', '-y', src, `-o${dest}`]) }
-        catch (e2) { return res.status(500).json({ error: 'rar_extract_failed' }) }
+        console.log(`Running: ${cmd} ${args.join(' ')} (cwd: ${dest})`)
+        const p = child_process.spawn(cmd, args, { cwd: dest, stdio: 'pipe' })
+        let stdout = ''
+        let stderr = ''
+        p.stdout?.on('data', d => stdout += d.toString())
+        p.stderr?.on('data', d => stderr += d.toString())
+        p.on('error', (err) => {
+          console.error(`Process error: ${err.message}`)
+          reject(err)
+        })
+        p.on('close', (code) => {
+          if (code === 0) {
+            console.log(`Process completed successfully with code ${code}`)
+            resolve(true)
+          } else {
+            console.error(`Process exited with code ${code}, stderr: ${stderr}`)
+            reject(new Error(`exit_${code}: ${stderr}`))
+          }
+        })
+      } catch (e) {
+        console.error(`Spawn error: ${e.message}`)
+        reject(e)
       }
-      audit(req.user.username, 'unrar', { src, dest })
-      return res.json({ ok: true })
+    })
+    
+    try {
+      if (lower.endsWith('.zip')) {
+        try {
+          // Try system unzip first (handles large files better)
+          console.log('Attempting system unzip...')
+          await run('unzip', ['-o', src])
+          console.log('System unzip completed successfully:', src)
+          audit(req.user.username, 'unzip', { src, dest })
+          return res.json({ ok: true, method: 'system_unzip' })
+        } catch (e1) {
+          console.warn('System unzip failed:', e1.message)
+          // Fallback to AdmZip for systems without unzip command
+          try {
+            console.log('Attempting AdmZip fallback...')
+            const zip = new AdmZip(src)
+            zip.extractAllTo(dest, true)
+            console.log('AdmZip extraction completed successfully:', src)
+            audit(req.user.username, 'unzip', { src, dest })
+            return res.json({ ok: true, method: 'adm_zip' })
+          } catch (e2) {
+            console.error('AdmZip extraction failed:', e2)
+            return res.status(500).json({ error: 'unzip_failed', details: e2.message })
+          }
+        }
+      } else if (lower.endsWith('.rar')) {
+        try {
+          console.log('Attempting unrar...')
+          await run('unrar', ['x', '-o+', '-y', src, dest])
+          console.log('Unrar completed successfully:', src)
+          audit(req.user.username, 'unrar', { src, dest })
+          return res.json({ ok: true, method: 'unrar' })
+        } catch (e1) {
+          try {
+            console.log('Attempting 7z fallback...')
+            await run('7z', ['x', '-y', src, `-o${dest}`])
+            console.log('7z extraction completed successfully:', src)
+            audit(req.user.username, 'unrar', { src, dest })
+            return res.json({ ok: true, method: '7z' })
+          } catch (e2) {
+            console.error('RAR extract failed:', e2)
+            return res.status(500).json({ error: 'rar_extract_failed', details: e2.message })
+          }
+        }
+      } else {
+        return res.status(400).json({ error: 'unsupported_archive' })
+      }
+    } catch (e) {
+      console.error('Extraction error:', e)
+      return res.status(500).json({ error: 'extraction_failed', details: e.message })
     }
-    return res.status(400).json({ error: 'unsupported_archive' })
-  } catch { res.status(400).json({ error: 'unzip_failed' }) }
+  } catch (e) { 
+    console.error('Unzip endpoint error:', e)
+    res.status(400).json({ error: 'unzip_failed', details: e.message }) 
+  }
 })
 
 app.get('/api/settings/server-properties', requireAuth, (req, res) => {
