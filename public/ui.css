@@ -71,8 +71,28 @@ body{
 #app.sidebar-collapsed .sidebar .label{display:none}
 #app.sidebar-collapsed .logo{font-size:14px}
 
+/* Hidden sidebar (desktop) */
+#app.sidebar-hidden .sidebar{display:none}
+#app.sidebar-hidden .grid{grid-template-columns:1fr}
+
+/* Mobile drawer + backdrop */
+.sidebar-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:80}
+.sidebar-backdrop.hidden{display:none}
+
+/* Drawer animation helpers */
+.sidebar{transition:transform .18s ease}
+
 /* Theme button */
 #themeBtn{min-width:40px;padding:6px;border-radius:8px}
 
 /* Responsive */
-@media (max-width:900px){.sidebar{display:none}.grid{grid-template-columns:1fr}}
+@media (max-width:900px){
+  /* Default: hide sidebar on mobile */
+  .sidebar{display:block;position:fixed;left:0;top:0;bottom:0;width:80vw;max-width:280px;transform:translateX(-100%);z-index:100;overflow:auto}
+  /* Main content spans full width */
+  .grid{grid-template-columns:1fr}
+
+  /* When open, slide in and show backdrop */
+  #app.mobile-sidebar-open .sidebar{transform:translateX(0)}
+  #app.mobile-sidebar-open .sidebar-backdrop{display:block}
+}

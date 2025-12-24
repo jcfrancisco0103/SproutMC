@@ -35,7 +35,16 @@ document.addEventListener('DOMContentLoaded',()=>{const tk=localStorage.getItem(
     }catch(e){}
   }, 10*1000);
 })
-document.querySelectorAll('.side-nav button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab))
+  document.querySelectorAll('.side-nav button').forEach(b=>b.onclick=()=>{ showTab(b.dataset.tab); try{ const isMobile = window.matchMedia('(max-width:900px)').matches; if(isMobile){ const app=document.getElementById('app'); app.classList.remove('mobile-sidebar-open'); const sb=document.getElementById('sidebarBackdrop'); if(sb) sb.classList.add('hidden'); } }catch{} })
+  const ub=el('updatesBtn');if(ub)ub.onclick=()=>{document.body.classList.add('modal-open');const m=el('updatesModal');if(m)m.classList.remove('hidden')};const logout=el('logoutBtn');if(logout){logout.onclick=()=>{localStorage.removeItem('token');location.href='/login.html'}};const collapse=document.getElementById('collapseSidebar');if(collapse){collapse.onclick=()=>{const pressed=collapse.getAttribute('aria-pressed')==='true';collapse.setAttribute('aria-pressed',String(!pressed));document.getElementById('app').classList.toggle('sidebar-collapsed')}}
+
+  // Menu button: hide sidebar on desktop, open drawer on mobile
+  const menuBtn=document.getElementById('menuBtn');
+  if(menuBtn){ menuBtn.onclick=()=>{ const app=document.getElementById('app'); const isMobile = window.matchMedia('(max-width:900px)').matches; const pressed = menuBtn.getAttribute('aria-pressed')==='true'; const nextPressed = !pressed; menuBtn.setAttribute('aria-pressed', String(nextPressed)); if(isMobile){ app.classList.toggle('mobile-sidebar-open', nextPressed); const sb=document.getElementById('sidebarBackdrop'); if(sb) sb.classList.toggle('hidden', !nextPressed); } else { app.classList.toggle('sidebar-hidden', nextPressed); } } }
+
+  // Backdrop: close mobile drawer when clicking outside
+  const sidebarBackdrop=document.getElementById('sidebarBackdrop');
+  if(sidebarBackdrop){ sidebarBackdrop.onclick=()=>{ const app=document.getElementById('app'); app.classList.remove('mobile-sidebar-open'); sidebarBackdrop.classList.add('hidden'); const menuBtn=document.getElementById('menuBtn'); if(menuBtn) menuBtn.setAttribute('aria-pressed','false'); } }
 if(el('logoutBtn')){el('logoutBtn').onclick=()=>{}}
 function updateActiveHeader(){const label=el('activeInstanceLabel');if(label)label.textContent=(activeInstance||'(none)');const btn=el('activeInstanceBtn');if(btn)btn.setAttribute('aria-expanded','false');const dd=el('activeInstanceDropdown');if(dd)dd.classList.add('hidden')}
 // Action state tracking (e.g., restart in progress)

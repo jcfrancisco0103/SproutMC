@@ -35,6 +35,7 @@
     <main class="main">
       <header class="topbar">
         <div class="top-left">
+          <button id="menuBtn" class="btn small" aria-pressed="false" title="Toggle menu">☰</button>
           <div class="brand">
             <img id="brandLogo" src="/logo.png" alt="HoneyBee" class="brand-logo" onerror="this.classList.add('hidden')" />
             <span>HoneyBee Wrapper</span>
@@ -250,6 +251,7 @@
       </section>
     </div>
     </main>
+    <div id="sidebarBackdrop" class="sidebar-backdrop hidden" aria-hidden="true"></div>
     <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div></div>
     <div id="updatesModal" class="modal-overlay hidden">
       <div class="modal">
