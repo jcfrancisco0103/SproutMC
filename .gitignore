@@ -4,4 +4,3 @@ logs/
 data/
 node_modules/
 data/audit.log
-config.json
