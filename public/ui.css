@@ -58,6 +58,19 @@ body{
 .toast-error{background:linear-gradient(90deg,#5a1515,#3a0f0f)}
 .toast-warn{background:linear-gradient(90deg,#8a6a1a,#5b4710)}
 
+/* Optimization notification */
+.optimization-notification{position:fixed;top:18px;right:18px;z-index:3999;background:linear-gradient(135deg,#1f3f2c,#163021);border:1px solid #2aa54b;border-radius:12px;padding:16px;box-shadow:0 12px 32px rgba(75,214,106,.25);max-width:320px;transition:all .3s ease;animation:slideIn .3s ease}
+.optimization-notification.hidden{opacity:0;transform:translateX(calc(100% + 20px));pointer-events:none}
+.notification-content{display:flex;gap:12px;align-items:flex-start}
+.notification-icon{font-size:24px;flex-shrink:0;line-height:1.4}
+.notification-text{flex:1;display:flex;flex-direction:column;gap:4px}
+.notification-title{font-weight:700;color:#a6f5bf;font-size:15px}
+.notification-message{font-size:13px;color:#7be397;line-height:1.4}
+.notification-close{background:transparent;border:none;color:#7be397;font-size:18px;padding:0;cursor:pointer;min-width:auto;transition:color .2s ease;flex-shrink:0}
+.notification-close:hover{color:#a6f5bf}
+
+@keyframes slideIn{from{opacity:0;transform:translateX(calc(100% + 20px))}to{opacity:1;transform:translateX(0)}}
+
 
 /* Cards */
 .card{background:var(--surface);padding:12px;border-radius:10px;box-shadow:var(--shadow);border:1px solid rgba(0,0,0,0.03)}

@@ -3,8 +3,8 @@
   "javaPath": "java",
   "serverJar": "/root/SproutMC/instances/default/server.jar",
   "jvmArgs": [
-    "-Xmx6144M",
-    "-Xms3072M",
+    "-Xmx4096M",
+    "-Xms2048M",
     "-XX:+UseG1GC",
     "-XX:+ParallelRefProcEnabled",
     "-XX:MaxGCPauseMillis=200",
@@ -21,7 +21,8 @@
     "-XX:SoftRefLRUPolicyMSPerMB=50",
     "-XX:SurvivorRatio=32",
     "-XX:+PerfDisableSharedMem",
-    "-XX:MaxTenuringThreshold=1"
+    "-XX:MaxTenuringThreshold=1",
+    "-XX:+UseStringDeduplication"
   ],
   "autoRestart": false,
   "autoRestartMaxBackoffSeconds": 300,

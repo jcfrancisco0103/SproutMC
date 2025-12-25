@@ -9,7 +9,9 @@ header{display:flex;justify-content:space-between;align-items:center;padding:14p
 .status-pill.status-online{background:linear-gradient(180deg,#163021,#1f3f2c);color:#a6f5bf;border-color:#2aa54b}
 .status-pill.status-offline{background:linear-gradient(180deg,#2a2a2a,#333);color:#ddd;border-color:#555}
 .status-pill.status-crashed{background:linear-gradient(180deg,#3a1412,#581b18);color:#ffd4d0;border-color:#7a2a25}
+.status-pill.status-starting{background:linear-gradient(180deg,#3a2e12,#5a4a18);color:#ffe8b0;border-color:#816224;animation:pulse-status .6s ease-in-out infinite}
 
+@keyframes pulse-status{0%,100%{opacity:1}50%{opacity:0.7}}
 .hidden{display:none}
 main{padding:16px}
 .container{max-width:1200px;margin:0 auto}
