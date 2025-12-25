@@ -26,6 +26,7 @@
         <button data-tab="worlds">🌐 <span class="label">Worlds</span></button>
         <button data-tab="updates">⬆️ <span class="label">Updates</span></button>
         <button data-tab="metrics">📊 <span class="label">Metrics</span></button>
+        <button data-tab="optimize">⚡ <span class="label">Optimize</span></button>
         <button data-tab="terminal">⌨️ <span class="label">Terminal</span></button>
         <button data-tab="settings">⚙️ <span class="label">Settings</span></button>
         <button data-tab="account">👤 <span class="label">Account</span></button>
@@ -238,6 +239,91 @@
           <div class="card"><h3>RAM Usage (% of system) <span id="ramCur"></span></h3><canvas id="ramChart"></canvas></div>
           <div class="card"><h3>Disk Used <span id="diskCur"></span></h3><canvas id="diskChart"></canvas></div>
           <div class="card"><h3>Server TPS <span id="tpsCur"></span></h3><canvas id="tpsChart"></canvas></div>
+        </div>
+      </section>
+      <section id="optimize" class="tab hidden">
+        <div class="grid settings-grid">
+          <div class="card">
+            <h3>Device Specifications</h3>
+            <div class="form-grid">
+              <div class="form-row">
+                <label class="form-label">Device Type</label>
+                <div id="deviceType" class="form-input-display">Detecting...</div>
+              </div>
+              <div class="form-row">
+                <label class="form-label">CPU Cores</label>
+                <div id="cpuCores" class="form-input-display">Detecting...</div>
+              </div>
+              <div class="form-row">
+                <label class="form-label">System RAM</label>
+                <div id="systemRam" class="form-input-display">Detecting...</div>
+              </div>
+              <div class="form-row">
+                <label class="form-label">Device Memory (Browser Estimate)</label>
+                <div id="deviceMemory" class="form-input-display">Detecting...</div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>RAM Allocation</h3>
+            <div class="form-grid">
+              <div class="form-row">
+                <label class="form-label">Available for Server (MB)</label>
+                <input id="allocatedRam" type="number" min="512" step="256" class="form-input" />
+              </div>
+              <div class="form-row">
+                <label class="form-label">Recommendation</label>
+                <div id="ramRecommendation" class="form-input-display">Based on your device specs</div>
+              </div>
+              <div class="form-row">
+                <label class="form-label">RAM Slider</label>
+                <div class="slider-container">
+                  <input id="ramSlider" type="range" min="256" max="12288" step="256" value="2048" class="slider-input" />
+                  <span id="ramPercentage" class="percentage-display">2048 MB</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Performance Optimization</h3>
+            <div class="form-grid">
+              <div class="form-row">
+                <label class="form-label">Optimization Profile</label>
+                <select id="optimizationProfile" class="form-input">
+                  <option value="low">Low-End Device (512MB - 2GB)</option>
+                  <option value="medium">Medium Device (2GB - 6GB)</option>
+                  <option value="high">High-End Device (6GB+)</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label class="form-label">Enable Aikar Flags</label>
+                <label class="switch"><input type="checkbox" id="optAikarFlags" checked><span class="slider"></span></label>
+              </div>
+              <div class="form-row">
+                <label class="form-label">Disable Animations (Low-End)</label>
+                <label class="switch"><input type="checkbox" id="optDisableAnimations"><span class="slider"></span></label>
+              </div>
+              <div class="form-row">
+                <label class="form-label">Reduce View Distance</label>
+                <label class="switch"><input type="checkbox" id="optReduceViewDist"><span class="slider"></span></label>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>JVM Arguments</h3>
+            <div class="form-grid">
+              <div class="form-row">
+                <label class="form-label">Generated JVM Args</label>
+                <textarea id="optimizedJvmArgs" rows="8" class="form-input" readonly></textarea>
+              </div>
+            </div>
+            <div class="row">
+              <button id="applyOptimization" class="btn-accent">Apply Optimization</button>
+              <button id="resetOptimization" class="btn">Reset to Default</button>
+              <button id="refreshSpecs" class="btn">Refresh Specs</button>
+            </div>
+          </div>
         </div>
       </section>
       <section id="terminal" class="tab hidden">

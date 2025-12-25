@@ -30,7 +30,10 @@ const server = http.createServer(app)
 const wss = new WebSocket.Server({ server })
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
+// Serve the SPA normally; the frontend script will redirect to /login.html if unauthenticated.
 app.use(express.static(path.resolve('public'), { maxAge: 0, etag: true }))
+app.get('/app', (_req, res) => res.sendFile(path.resolve('public/index.html')))
+app.get('/', (_req, res) => res.sendFile(path.resolve('public/index.html')))
 
 const dataDir = path.resolve('data')
 const logsDir = path.resolve('logs')
