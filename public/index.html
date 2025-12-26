@@ -22,12 +22,9 @@
         <button data-tab="plugins">🔌 <span class="label">Plugins</span></button>
         <button data-tab="backups">🗄 <span class="label">Backups</span></button>
         <button data-tab="servers">🧭 <span class="label">Servers</span></button>
-        <button data-tab="tasks">🕑 <span class="label">Tasks</span></button>
         <button data-tab="worlds">🌐 <span class="label">Worlds</span></button>
         <button data-tab="updates">⬆️ <span class="label">Updates</span></button>
-        <button data-tab="metrics">📊 <span class="label">Metrics</span></button>
         <button data-tab="optimize">⚡ <span class="label">Optimize</span></button>
-        <button data-tab="terminal">⌨️ <span class="label">Terminal</span></button>
         <button data-tab="settings">⚙️ <span class="label">Settings</span></button>
         <button data-tab="account">👤 <span class="label">Account</span></button>
       </nav>
@@ -98,6 +95,23 @@
             <div style="flex:1"></div>
             <button id="consoleJumpLast">Jump to last line</button>
           </div>
+          <div class="card" style="background: rgba(0,0,0,0.2); padding: 12px; margin-bottom: 12px;">
+            <h4 style="margin: 0 0 8px 0; color: #4bd66a; font-size: 0.95em;">Server Metrics</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;">
+              <div style="display: flex; justify-content: space-between; padding: 4px 8px; background: rgba(255,255,255,0.03); border-radius: 4px;">
+                <span style="color: #aaa;">CPU:</span>
+                <span id="consoleCpu" style="color: #fff; font-weight: 500;">0.0% / 100%</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding: 4px 8px; background: rgba(255,255,255,0.03); border-radius: 4px;">
+                <span style="color: #aaa;">RAM:</span>
+                <span id="consoleRam" style="color: #fff; font-weight: 500;">0 GB / 0 GB</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding: 4px 8px; background: rgba(255,255,255,0.03); border-radius: 4px;">
+                <span style="color: #aaa;">Disk Usage:</span>
+                <span id="consoleDisk" style="color: #fff; font-weight: 500;">0 MB / 0 GB</span>
+              </div>
+            </div>
+          </div>
           <div class="console" id="consoleOut"></div>
           <div class="row">
             <input id="consoleIn" placeholder="Enter command" />
@@ -166,21 +180,6 @@
           <table id="serverTable"></table>
         </div>
       </section>
-      <section id="tasks" class="tab hidden">
-        <div class="row">
-          <input id="taskCron" placeholder="Cron" />
-          <select id="taskType">
-            <option value="restart">Restart</option>
-            <option value="backup">Backup</option>
-            <option value="command">Command</option>
-            <option value="announce">Announce</option>
-          </select>
-          <input id="taskArg" placeholder="Arg" />
-          <label><input type="checkbox" id="taskEnabled" checked /> Enabled</label>
-          <button id="taskCreate">Create</button>
-        </div>
-        <table id="taskTable"></table>
-      </section>
       <section id="worlds" class="tab hidden">
         <div class="row">
           <button id="saveAll">Save All</button>
@@ -198,8 +197,6 @@
               <div class="form-row"><label class="form-label">JVM Args</label><textarea id="cfgJvmArgs" rows="6" class="form-input"></textarea></div>
               <div class="form-row"><label class="form-label">Auto Restart</label><label class="switch"><input type="checkbox" id="cfgAutoRestart"><span class="slider"></span></label></div>
               <div class="form-row"><label class="form-label">Max Backoff (s)</label><input id="cfgMaxBackoff" type="number" min="1" class="form-input" /></div>
-              <div class="form-row"><label class="form-label">Terminal Elevate (Linux)</label><label class="switch"><input type="checkbox" id="cfgTerminalElevate"><span class="slider"></span></label></div>
-              <div class="form-row"><label class="form-label">Use Aikar Flags</label><label class="switch"><input type="checkbox" id="cfgAikarFlags"><span class="slider"></span></label></div>
             </div>
             <div class="row">
               <button id="cfgSave">Save Config</button>
@@ -231,14 +228,6 @@
           <div class="row">
             <button id="acctSave" class="btn">Save Password</button>
           </div>
-        </div>
-      </section>
-      <section id="metrics" class="tab hidden">
-        <div class="grid">
-          <div class="card"><h3>CPU Usage (%) <span id="cpuCur"></span></h3><canvas id="cpuChart"></canvas></div>
-          <div class="card"><h3>RAM Usage (% of system) <span id="ramCur"></span></h3><canvas id="ramChart"></canvas></div>
-          <div class="card"><h3>Disk Used <span id="diskCur"></span></h3><canvas id="diskChart"></canvas></div>
-          <div class="card"><h3>Server TPS <span id="tpsCur"></span></h3><canvas id="tpsChart"></canvas></div>
         </div>
       </section>
       <section id="optimize" class="tab hidden">
@@ -316,15 +305,6 @@
               <button id="refreshSpecs" class="btn">Refresh Specs</button>
             </div>
           </div>
-        </div>
-      </section>
-      <section id="terminal" class="tab hidden">
-        <div class="card">
-          <div class="row">
-            <input id="termCmd" class="form-input" placeholder="Enter command" />
-            <button id="termRun">Run</button>
-          </div>
-          <div class="console" id="termOut"></div>
         </div>
       </section>
     </div>

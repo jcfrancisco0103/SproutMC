@@ -3,17 +3,70 @@ let ws=null
 function el(id){return document.getElementById(id)}
 function getStoredToken(){try{return sessionStorage.getItem('token')||localStorage.getItem('token')}catch(e){return localStorage.getItem('token')}}
 function clearStoredToken(){try{localStorage.removeItem('token');sessionStorage.removeItem('token')}catch(e){}}
-function ensureTabData(t){try{if(t==='dashboard'){loadStatus()}if(t==='console'){loadConsoleHistory()}if(t==='files'){loadFiles(el('pathInput').value||'.')}if(t==='plugins'){loadPlugins()}if(t==='backups'){loadBackups()}if(t==='servers'){loadServers()}if(t==='tasks'){loadTasks()}if(t==='worlds'){loadWorlds()}if(t==='settings'){loadConfig()}if(t==='account'){loadAccounts()}if(t==='optimize'){loadDeviceSpecs()}}catch{}}
+function ensureTabData(t){try{if(t==='dashboard'){loadStatus()}if(t==='console'){loadConsoleHistory()}if(t==='files'){loadFiles(el('pathInput').value||'.')}if(t==='plugins'){loadPlugins()}if(t==='backups'){loadBackups()}if(t==='servers'){loadServers()}if(t==='worlds'){loadWorlds()}if(t==='settings'){loadConfig()}if(t==='account'){loadAccounts()}if(t==='optimize'){loadDeviceSpecs()}}catch{}}
 
 // ===== Performance Optimization Functions =====
-let deviceSpecs={deviceType:'Unknown',cpuCores:0,systemRam:0,deviceMemory:0}
-function detectDeviceSpecs(){const ua=navigator.userAgent;const isAndroid=/Android/i.test(ua);const isIOS=/iPhone|iPad|iPod/i.test(ua);const isTablet=/Tablet|iPad/i.test(ua);deviceSpecs.deviceType=isAndroid?'Android':(isIOS?'iOS':'Desktop');if(navigator.hardwareConcurrency){deviceSpecs.cpuCores=navigator.hardwareConcurrency}else{deviceSpecs.cpuCores=4}if(navigator.deviceMemory){deviceSpecs.systemRam=navigator.deviceMemory*1024}else{deviceSpecs.systemRam=4096}if(performance.memory){deviceSpecs.deviceMemory=Math.floor(performance.memory.jsHeapSizeLimit/1024/1024)}else{deviceSpecs.deviceMemory=deviceSpecs.systemRam}return deviceSpecs}
+let deviceSpecs={deviceType:'Server',cpuCores:0,systemRam:0,deviceMemory:0}
+async function detectDeviceSpecs(){
+  // 1) Prefer server-reported specs (authoritative for the host running the wrapper)
+  try {
+    const response = await apiFetch('/api/system/specs')
+    if (response.ok) {
+      const data = await response.json()
+      deviceSpecs.cpuCores = data.cpuCores || deviceSpecs.cpuCores
+      deviceSpecs.systemRam = data.totalMemoryMB || deviceSpecs.systemRam
+      deviceSpecs.deviceMemory = data.totalMemoryMB || deviceSpecs.deviceMemory
+      deviceSpecs.deviceType = `Server (${data.platform || 'unknown'})`
+    }
+  } catch (e) {
+    console.warn('Error fetching server specs:', e)
+  }
+
+  // 2) If still missing, try /api/status metrics (also server-side and cached)
+  if(!deviceSpecs.cpuCores || !deviceSpecs.systemRam){
+    try{
+      const r=await apiFetch(urlName('/api/status'))
+      if(r.ok){const j=await r.json();const m=j.metrics||{};if(m.cpuCores)deviceSpecs.cpuCores=m.cpuCores; if(m.systemMemoryTotal)deviceSpecs.systemRam=Math.round(m.systemMemoryTotal/1024/1024); if(m.systemMemoryTotal)deviceSpecs.deviceMemory=deviceSpecs.systemRam; deviceSpecs.deviceType=deviceSpecs.deviceType||'Server'}
+    }catch(e){console.warn('status-based specs fallback failed',e)}
+  }
+
+  // 3) Last resort: browser hints
+  if(!deviceSpecs.cpuCores || !deviceSpecs.systemRam){
+    fallbackClientDetection()
+  }
+  return deviceSpecs
+}
+
+function fallbackClientDetection() {
+  const ua=navigator.userAgent
+  const isAndroid=/Android/i.test(ua)
+  const isIOS=/iPhone|iPad|iPod/i.test(ua)
+  deviceSpecs.deviceType=deviceSpecs.deviceType|| (isAndroid?'Android (Client)':(isIOS?'iOS (Client)':'Desktop (Client)'))
+  if(!deviceSpecs.cpuCores){
+    deviceSpecs.cpuCores=navigator.hardwareConcurrency||4
+  }
+  if(!deviceSpecs.systemRam){
+    if(navigator.deviceMemory){
+      deviceSpecs.systemRam=navigator.deviceMemory*1024
+    }else{
+      deviceSpecs.systemRam=4096
+    }
+  }
+  if(!deviceSpecs.deviceMemory){
+    if(performance.memory){
+      deviceSpecs.deviceMemory=Math.floor(performance.memory.jsHeapSizeLimit/1024/1024)
+    }else{
+      deviceSpecs.deviceMemory=deviceSpecs.systemRam
+    }
+  }
+  return deviceSpecs
+}
 function getRAMRecommendation(specs){const totalRam=specs.systemRam||4096;if(totalRam<=2048){return{min:512,recommended:768,max:1024}}else if(totalRam<=4096){return{min:1024,recommended:2048,max:3072}}else if(totalRam<=8192){return{min:2048,recommended:4096,max:6144}}else{return{min:4096,recommended:6144,max:Math.min(12288,Math.floor(totalRam*0.75))}}}
-function generateJvmArgs(allocMb,profile,aikar){let args=['-Xmx'+allocMb+'M','-Xms'+Math.floor(allocMb*0.5)+'M'];if(aikar){args.push('-XX:+UseG1GC','-XX:+ParallelRefProcEnabled','-XX:MaxGCPauseMillis=200','-XX:+UnlockExperimentalVMOptions','-XX:+DisableExplicitGC','-XX:+AlwaysPreTouch','-XX:G1NewSizePercent=30','-XX:G1MaxNewSizePercent=40','-XX:G1HeapRegionSize=8M','-XX:G1ReservePercent=20','-XX:G1HeapWastePercent=5','-XX:G1MixedGCCountTarget=4','-XX:InitiatingHeapOccupancyPercent=15','-XX:SoftRefLRUPolicyMSPerMB=50','-XX:SurvivorRatio=32','-XX:+PerfDisableSharedMem','-XX:MaxTenuringThreshold=1')}if(profile==='low'){args.push('-XX:+UseStringDeduplication','-XX:G1HeapWastePercent=10')}else if(profile==='medium'){args.push('-XX:+UseStringDeduplication')}else if(profile==='custom'){args.push('-XX:+UseCustomProfile')}return args.join(' ')}
+function generateJvmArgs(allocMb,profile,aikar){let args=['-Xmx'+allocMb+'M','-Xms'+Math.floor(allocMb*0.5)+'M'];if(aikar){args.push('-XX:+UseG1GC','-XX:+ParallelRefProcEnabled','-XX:MaxGCPauseMillis=200','-XX:+UnlockExperimentalVMOptions','-XX:+DisableExplicitGC','-XX:+AlwaysPreTouch','-XX:G1NewSizePercent=30','-XX:G1MaxNewSizePercent=40','-XX:G1HeapRegionSize=8M','-XX:G1ReservePercent=20','-XX:G1HeapWastePercent=5','-XX:G1MixedGCCountTarget=4','-XX:InitiatingHeapOccupancyPercent=15','-XX:SoftRefLRUPolicyMSPerMB=50','-XX:SurvivorRatio=32','-XX:+PerfDisableSharedMem','-XX:MaxTenuringThreshold=1')}if(profile==='low'){args.push('-XX:+UseStringDeduplication','-XX:G1HeapWastePercent=10')}else if(profile==='medium'){args.push('-XX:+UseStringDeduplication')}return args.join(' ')}
 function updateRAMSlider(){const allocInput=el('allocatedRam');const slider=el('ramSlider');const percentDisplay=el('ramPercentage');const recommend=getRAMRecommendation(deviceSpecs);if(allocInput&&slider){slider.max=recommend.max;slider.min=256;const inputVal=parseInt(allocInput.value)||2048;slider.value=inputVal;percentDisplay.textContent=inputVal+' MB'}}
-function loadDeviceSpecs(){try{detectDeviceSpecs();el('deviceType').textContent=deviceSpecs.deviceType;el('cpuCores').textContent=deviceSpecs.cpuCores+' cores';el('systemRam').textContent=(deviceSpecs.systemRam/1024).toFixed(1)+' GB';el('deviceMemory').textContent=deviceSpecs.deviceMemory+' MB';const rec=getRAMRecommendation(deviceSpecs);el('ramRecommendation').textContent=`${rec.min}MB - ${rec.max}MB (Recommended: ${rec.recommended}MB)`;loadSavedOptimization()}catch(e){console.warn('Device spec loading failed',e)}}
-function loadSavedOptimization(){try{apiFetch('/api/settings/config').then(r=>{if(!r.ok)throw new Error('Failed to load config');return r.json()}).then(j=>{const jvmArgs=j.jvmArgs||[];console.log('Loaded config:',{jvmArgs});const rec=getRAMRecommendation(deviceSpecs);if(el('ramSlider')){el('ramSlider').max=rec.max;el('ramSlider').min=256}let allocatedRam=rec.recommended;if(jvmArgs&&jvmArgs.length>0){const argsStr=Array.isArray(jvmArgs)?jvmArgs.join(' '):jvmArgs;const xmxMatch=argsStr.match(/-Xmx(\d+)M/);if(xmxMatch){allocatedRam=parseInt(xmxMatch[1])}console.log('Extracted allocated RAM from JVM args:',allocatedRam);el('allocatedRam').value=allocatedRam;el('ramSlider').value=allocatedRam;const hasAikar=argsStr.includes('UseG1GC');if(el('optAikarFlags')){el('optAikarFlags').checked=hasAikar}detectProfileFromJvmArgs(argsStr)}else{el('allocatedRam').value=rec.recommended;el('ramSlider').value=rec.recommended;el('optimizationProfile').value='medium';el('optAikarFlags').checked=true}updateRAMSlider();updateOptimizedArgs()}).catch(e=>{console.warn('Failed to load saved optimization',e);const rec=getRAMRecommendation(deviceSpecs);if(el('ramSlider')){el('ramSlider').max=rec.max;el('ramSlider').min=256}el('allocatedRam').value=rec.recommended;el('ramSlider').value=rec.recommended;el('optimizationProfile').value='medium';el('optAikarFlags').checked=true;updateRAMSlider();updateOptimizedArgs()})}catch(e){console.warn('Load saved optimization error',e)}}
-function detectProfileFromJvmArgs(argsStr){if(argsStr.includes('UseCustomProfile')){el('optimizationProfile').value='custom'}else if(argsStr.includes('-XX:-UseAdaptiveSizePolicy')){el('optimizationProfile').value='low'}else if(argsStr.includes('UseStringDeduplication')){el('optimizationProfile').value='medium'}else if(argsStr.includes('UseG1GC')){el('optimizationProfile').value='high'}else{el('optimizationProfile').value='custom'}}
+async function loadDeviceSpecs(){try{await detectDeviceSpecs();el('deviceType').textContent=deviceSpecs.deviceType;el('cpuCores').textContent=deviceSpecs.cpuCores+' cores';el('systemRam').textContent=(deviceSpecs.systemRam/1024).toFixed(1)+' GB';el('deviceMemory').textContent=deviceSpecs.deviceMemory+' MB';const rec=getRAMRecommendation(deviceSpecs);el('ramRecommendation').textContent=`${rec.min}MB - ${rec.max}MB (Recommended: ${rec.recommended}MB)`;loadSavedOptimization()}catch(e){console.warn('Device spec loading failed',e)}}
+function loadSavedOptimization(){try{apiFetch(urlInst('/api/settings/config')).then(r=>{if(!r.ok)throw new Error('Failed to load config');return r.json()}).then(j=>{const jvmArgs=j.jvmArgs||[];console.log('Loaded config:',{jvmArgs});const rec=getRAMRecommendation(deviceSpecs);if(el('ramSlider')){el('ramSlider').max=rec.max;el('ramSlider').min=256}let allocatedRam=rec.recommended;if(jvmArgs&&jvmArgs.length>0){const argsStr=Array.isArray(jvmArgs)?jvmArgs.join(' '):jvmArgs;const xmxMatch=argsStr.match(/-Xmx(\d+)M/);if(xmxMatch){allocatedRam=parseInt(xmxMatch[1])}console.log('Extracted allocated RAM from JVM args:',allocatedRam);el('allocatedRam').value=allocatedRam;el('ramSlider').value=allocatedRam;const hasAikar=argsStr.includes('UseG1GC');if(el('optAikarFlags')){el('optAikarFlags').checked=hasAikar}detectProfileFromJvmArgs(argsStr)}else{el('allocatedRam').value=rec.recommended;el('ramSlider').value=rec.recommended;el('optimizationProfile').value='medium';el('optAikarFlags').checked=true}updateRAMSlider();updateOptimizedArgs()}).catch(e=>{console.warn('Failed to load saved optimization',e);const rec=getRAMRecommendation(deviceSpecs);if(el('ramSlider')){el('ramSlider').max=rec.max;el('ramSlider').min=256}el('allocatedRam').value=rec.recommended;el('ramSlider').value=rec.recommended;el('optimizationProfile').value='medium';el('optAikarFlags').checked=true;updateRAMSlider();updateOptimizedArgs()})}catch(e){console.warn('Load saved optimization error',e)}}
+function detectProfileFromJvmArgs(argsStr){if(argsStr.includes('-XX:-UseAdaptiveSizePolicy')){el('optimizationProfile').value='low'}else if(argsStr.includes('UseStringDeduplication')){el('optimizationProfile').value='medium'}else if(argsStr.includes('UseG1GC')){el('optimizationProfile').value='high'}else{el('optimizationProfile').value='custom'}}
 function updateOptimizedArgs(){const allocMb=parseInt(el('allocatedRam').value)||2048;const profile=el('optimizationProfile').value;const aikar=el('optAikarFlags').checked;const args=generateJvmArgs(allocMb,profile,aikar);el('optimizedJvmArgs').value=args}
 if(el('optimizationProfile')){el('optimizationProfile').addEventListener('change',()=>{const profile=el('optimizationProfile').value;if(profile==='low'){el('allocatedRam').value=1024;el('optAikarFlags').checked=true}else if(profile==='medium'){el('allocatedRam').value=Math.min(4096,getRAMRecommendation(deviceSpecs).recommended);el('optAikarFlags').checked=true}else if(profile==='high'){el('allocatedRam').value=getRAMRecommendation(deviceSpecs).max;el('optAikarFlags').checked=true}const slider=el('ramSlider');if(slider){slider.value=el('allocatedRam').value;el('ramPercentage').textContent=el('allocatedRam').value+' MB'}updateOptimizedArgs()})}
 if(el('allocatedRam')){el('allocatedRam').addEventListener('input',()=>{updateOptimizedArgs()})}
@@ -22,12 +75,24 @@ if(el('ramSlider')){el('ramSlider').addEventListener('input',function(){const va
 function showOptimizationNotification(){try{const notif=el('optimizationNotification');if(notif){notif.classList.remove('hidden');localStorage.setItem('optimizationNotificationVisible','true')}}catch(e){console.warn('Failed to show optimization notification',e)}}
 function hideOptimizationNotification(){try{const notif=el('optimizationNotification');if(notif){notif.classList.add('hidden');localStorage.removeItem('optimizationNotificationVisible')}}catch(e){console.warn('Failed to hide optimization notification',e)}}
 if(el('closeOptNotification')){el('closeOptNotification').onclick=()=>{hideOptimizationNotification()}}
-if(el('applyOptimization')){el('applyOptimization').onclick=async()=>{try{const args=el('optimizedJvmArgs').value;const jvmArgsArray=args.split(/\s+/).filter(Boolean);console.log('Applying optimization with JVM args:',jvmArgsArray);const r=await apiFetch('/api/settings/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jvmArgs:jvmArgsArray})});if(r.ok){showToast('Optimization applied! Restart server to take effect.','success',6000);showOptimizationNotification();setTimeout(()=>{loadSavedOptimization()},500)}else{const errText=await r.text();console.error('API error:',r.status,errText);showToast('Failed to apply optimization: '+r.status,'danger',6000)}}catch(e){console.error('Error applying optimization:',e);showToast('Error applying optimization: '+e.message,'danger',6000)}}}
+if(el('applyOptimization')){el('applyOptimization').onclick=async()=>{try{const args=el('optimizedJvmArgs').value;const jvmArgsArray=args.split(/\s+/).filter(Boolean);console.log('Applying optimization with JVM args:',jvmArgsArray);const r=await apiFetch(urlInst('/api/settings/config'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jvmArgs:jvmArgsArray})});if(r.ok){showToast('Optimization applied! Restart server to take effect.','success',6000);showOptimizationNotification();setTimeout(()=>{loadSavedOptimization()},500)}else{const errText=await r.text();console.error('API error:',r.status,errText);showToast('Failed to apply optimization: '+r.status,'danger',6000)}}catch(e){console.error('Error applying optimization:',e);showToast('Error applying optimization: '+e.message,'danger',6000)}}}
 if(el('resetOptimization')){el('resetOptimization').onclick=async()=>{try{const rec=getRAMRecommendation(deviceSpecs);el('allocatedRam').value=rec.recommended;el('optimizationProfile').value='medium';el('optAikarFlags').checked=true;updateRAMSlider();updateOptimizedArgs();showToast('Reset to recommended defaults','info',4000)}catch(e){showToast('Error resetting optimization','danger',6000)}}}
 if(el('refreshSpecs')){el('refreshSpecs').onclick=()=>{loadDeviceSpecs();showToast('Device specs refreshed','info',3000)}}
 // ===== End Performance Optimization =====
 
-function showTab(t){document.querySelectorAll('.tab').forEach(x=>{x.classList.remove('active');x.classList.add('hidden')});document.querySelectorAll('.side-nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));const editor=el('editor');if(editor){editor.classList.add('hidden');document.body.classList.remove('modal-open')}const s=el(t);s.classList.remove('hidden');localStorage.setItem('activeTab',t);ensureTabData(t);requestAnimationFrame(()=>{s.classList.add('active');if(t==='console'){const c=el('consoleOut');if(c)c.scrollTop=c.scrollHeight}}) }
+function showTab(t){
+  const target = el(t)
+  const safeTab = target ? t : 'dashboard'
+  const s = target || el('dashboard')
+  document.querySelectorAll('.tab').forEach(x=>{x.classList.remove('active');x.classList.add('hidden')})
+  document.querySelectorAll('.side-nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===safeTab))
+  const editor=el('editor');if(editor){editor.classList.add('hidden');document.body.classList.remove('modal-open')}
+  if(!s) return
+  s.classList.remove('hidden')
+  localStorage.setItem('activeTab',safeTab)
+  ensureTabData(safeTab)
+  requestAnimationFrame(()=>{s.classList.add('active');if(safeTab==='console'){const c=el('consoleOut');if(c)c.scrollTop=c.scrollHeight}})
+}
 document.addEventListener('DOMContentLoaded',()=>{const tk=getStoredToken();if(!tk && location.pathname !== '/login.html'){location.href='/login.html'}
   const qp = new URLSearchParams(location.search);
   // Prefer URL param for deep-links, then per-tab session value, then server default.
@@ -124,7 +189,7 @@ async function loadStatus(){const r=await apiFetch(urlName('/api/status'));const
 
 async function loadAccounts(){try{const r=await apiFetch('/api/accounts');if(!r.ok){showToast('Cannot load accounts','warn');return}const j=await r.json();const sel=el('acctSelect');sel.innerHTML='';const cur=getCurrentUsername();const accounts=(j.accounts||[]).map(a=>a.username);accounts.forEach(u=>{const o=document.createElement('option');o.value=u;o.textContent=u;sel.appendChild(o)});if(cur){sel.value=cur}else if(accounts.length){sel.value=accounts[0]}
   // if not admin, hide current password row
-  if(cur !== 'admin'){el('currentPwdRow').style.display='block'} else {el('currentPwdRow').style.display='none'}
+    if(cur !== 'admin'){el('currentPwdRow').style.display='none'} else {el('currentPwdRow').style.display='block'}
 }catch(e){console.warn(e);showToast('Failed to fetch accounts','warn')} }
 
 el('acctSelect')?.addEventListener('change', ()=>{const cur=getCurrentUsername();const sel=el('acctSelect');if(!sel) return; if(cur !== 'admin' && sel.value !== cur){ // non-admin selecting another (shouldn't really happen)
@@ -154,23 +219,25 @@ el('consoleStart').onclick=async()=>{try{setActionLoading('start',true);setActio
 el('consoleStop').onclick=async()=>{try{setActionLoading('stop',true);setActionPhase('stop','Stopping…');const r=await apiFetch('/api/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:activeInstance})});if(r.ok){showToast('Stop requested','info',3000)}else{showToast('Stop failed','danger',4000);setActionLoading('stop',false);setActionPhase('stop',null)}}catch(e){showToast('Error stopping server','danger',4000);setActionLoading('stop',false);setActionPhase('stop',null)}}
 el('consoleKill').onclick=()=>apiFetch('/api/kill',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:activeInstance})})
 el('consoleRestart').onclick=async()=>{ try{ const ok = await showConfirm('Restart the active server?'); if(!ok) return; setActionLoading('restart',true); setActionPhase('restart','Stopping…'); const r = await apiFetch('/api/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:activeInstance})}); if(r.ok){ showToast('Restart requested','info',5000); waitForOnline(60*1000); } else { showToast('Restart failed','danger',5000); setActionLoading('restart',false); setActionPhase('restart', null) } }catch(e){ showToast('Network error during restart','danger',5000); setActionLoading('restart',false); setActionPhase('restart', null) } }
-el('startBtn').onclick=async()=>{try{setActionLoading('start',true);setActionPhase('start','Starting…');const r=await apiFetch('/api/start',{method:'POST'});if(r.ok){showToast('Start requested','info',3000);waitForOnline(60*1000)}else{showToast('Start failed','danger',4000);setActionLoading('start',false);setActionPhase('start',null)}}catch(e){showToast('Error starting server','danger',4000);setActionLoading('start',false);setActionPhase('start',null)}}
-el('stopBtn').onclick=async()=>{try{setActionLoading('stop',true);setActionPhase('stop','Stopping…');const r=await apiFetch('/api/stop',{method:'POST'});if(r.ok){showToast('Stop requested','info',3000)}else{showToast('Stop failed','danger',4000);setActionLoading('stop',false);setActionPhase('stop',null)}}catch(e){showToast('Error stopping server','danger',4000);setActionLoading('stop',false);setActionPhase('stop',null)}}
-el('restartBtn').onclick=async()=>{ try{ const ok = await showConfirm('Restart the server?'); if(!ok) return; setActionLoading('restart',true); setActionPhase('restart','Stopping…'); const r = await apiFetch('/api/restart',{method:'POST'}); if(r.ok){ showToast('Restart requested','info',5000); waitForOnline(60*1000); } else { showToast('Restart failed','danger',5000); setActionLoading('restart',false); setActionPhase('restart', null) } }catch(e){ showToast('Network error during restart','danger',5000); setActionLoading('restart',false); setActionPhase('restart', null) } }
-el('killBtn').onclick=()=>apiFetch('/api/kill',{method:'POST'})
+el('startBtn').onclick=async()=>{try{setActionLoading('start',true);setActionPhase('start','Starting…');const r=await apiFetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:activeInstance})});if(r.ok){showToast('Start requested','info',3000);waitForOnline(60*1000)}else{showToast('Start failed','danger',4000);setActionLoading('start',false);setActionPhase('start',null)}}catch(e){showToast('Error starting server','danger',4000);setActionLoading('start',false);setActionPhase('start',null)}}
+el('stopBtn').onclick=async()=>{try{setActionLoading('stop',true);setActionPhase('stop','Stopping…');const r=await apiFetch('/api/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:activeInstance})});if(r.ok){showToast('Stop requested','info',3000)}else{showToast('Stop failed','danger',4000);setActionLoading('stop',false);setActionPhase('stop',null)}}catch(e){showToast('Error stopping server','danger',4000);setActionLoading('stop',false);setActionPhase('stop',null)}}
+el('restartBtn').onclick=async()=>{ try{ const ok = await showConfirm('Restart the server?'); if(!ok) return; setActionLoading('restart',true); setActionPhase('restart','Stopping…'); const r = await apiFetch('/api/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:activeInstance})}); if(r.ok){ showToast('Restart requested','info',5000); waitForOnline(60*1000); } else { showToast('Restart failed','danger',5000); setActionLoading('restart',false); setActionPhase('restart', null) } }catch(e){ showToast('Network error during restart','danger',5000); setActionLoading('restart',false); setActionPhase('restart', null) } }
+el('killBtn').onclick=()=>apiFetch('/api/kill',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:activeInstance})})
 async function loadConsoleTail(){const r=await apiFetch(urlName('/api/console/tail'));const j=await r.json();j.lines.forEach(appendConsole)}
 async function loadConsoleHistory(){const r=await apiFetch(urlName('/api/console/history?lines=500'));if(r.ok){const j=await r.json();el('consoleOut').innerHTML='';el('logsPreview').innerHTML='';j.lines.forEach(appendConsole);const c=el('consoleOut');c.scrollTop=c.scrollHeight}else{await loadConsoleTail()}}
+const selectedFiles=new Set()
+
 async function loadFiles(p){
   showLoading()
   el('pathInput').value=p;
   const r=await apiFetch(urlInst('/api/fs/list?path='+encodeURIComponent(p)));
-  if(!r.ok){hideLoading();return}
+    if(!r.ok){hideLoading();return;}
   const j=await r.json();
   const t=el('fileTable');
   t.innerHTML='<tr><th><input type="checkbox" id="filesSelectAllCb" /></th><th>Name</th><th>Type</th><th>Size</th><th>Actions</th></tr>';
   selectedFiles.clear()
   const entries=[...j.entries].sort((a,b)=>{
-    if(a.isDir!==b.isDir) return a.isDir? -1: 1; // folders first
+     if(a.isDir!==b.isDir) return a.isDir ? -1 : 1; // folders first
     return a.name.localeCompare(b.name);
   })
   entries.forEach(e=>{
@@ -247,8 +314,8 @@ async function loadBackups(){showLoading();try{const r=await apiFetch('/api/back
 el('backupCreate').onclick=async()=>{await apiFetch('/api/backup/create',{method:'POST'});loadBackups()}
 async function loadTasks(){showLoading();const r=await apiFetch('/api/tasks');const j=await r.json();const t=el('taskTable');t.innerHTML='<tr><th>Cron</th><th>Type</th><th>Arg</th><th>Enabled</th><th>Actions</th></tr>';j.tasks.forEach(x=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${x.cron}</td><td>${x.type}</td><td>${x.command||x.message||''}</td><td>${x.enabled?'yes':'no'}</td>`;const tdA=document.createElement('td');const del=document.createElement('button');del.textContent='Delete';del.onclick=async()=>{await apiFetch('/api/tasks/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:x.id})});loadTasks()};tdA.appendChild(del);tr.appendChild(tdA);t.appendChild(tr)});hideLoading()}
 el('taskCreate').onclick=async()=>{const cron=el('taskCron').value;const type=el('taskType').value;const enabled=el('taskEnabled').checked;const arg=el('taskArg').value;const t={cron,type,enabled};if(type==='command')t.command=arg;if(type==='announce')t.message=arg;await apiFetch('/api/tasks/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(t)});loadTasks()}
-async function loadWorlds(){showLoading();const r=await apiFetch('/api/worlds');const j=await r.json();const t=el('worldTable');t.innerHTML='<tr><th>Name</th><th>Actions</th></tr>';j.worlds.forEach(w=>{const tr=document.createElement('tr');const tdN=document.createElement('td');tdN.textContent=w;const tdA=document.createElement('td');const dl=document.createElement('button');dl.textContent='Download';dl.onclick=async()=>{await apiFetch('/api/worlds/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({world:w})});loadWorlds()};tdA.appendChild(dl);const rs=document.createElement('button');rs.textContent='Reset';rs.onclick=async()=>{await apiFetch('/api/worlds/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({world:w})});loadWorlds()};tdA.appendChild(rs);tr.appendChild(tdN);tr.appendChild(tdA);t.appendChild(tr)});hideLoading()}
-el('saveAll').onclick=()=>apiFetch('/api/world/save',{method:'POST'})
+async function loadWorlds(){showLoading();const r=await apiFetch(urlInst('/api/worlds'));const j=await r.json();const t=el('worldTable');t.innerHTML='<tr><th>Name</th><th>Actions</th></tr>';j.worlds.forEach(w=>{const tr=document.createElement('tr');const tdN=document.createElement('td');tdN.textContent=w;const tdA=document.createElement('td');const dl=document.createElement('button');dl.textContent='Download';dl.onclick=async()=>{await apiFetch(urlInst('/api/worlds/download'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({world:w,inst:activeInstance})});loadWorlds()};tdA.appendChild(dl);const rs=document.createElement('button');rs.textContent='Reset';rs.onclick=async()=>{await apiFetch(urlInst('/api/worlds/reset'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({world:w,inst:activeInstance})});loadWorlds()};tdA.appendChild(rs);tr.appendChild(tdN);tr.appendChild(tdA);t.appendChild(tr)});hideLoading()}
+el('saveAll').onclick=()=>apiFetch(urlInst('/api/world/save'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({inst:activeInstance})})
 async function loadProps(){const c=el('propsForm');if(!c)return;const r=await apiFetch('/api/settings/server-properties');const j=await r.json();c.innerHTML='';Object.entries(j.properties||{}).forEach(([k,v])=>{const row=document.createElement('div');row.className='row';const a=document.createElement('input');a.value=k;a.disabled=true;const b=document.createElement('input');b.value=v;b.dataset.key=k;row.appendChild(a);row.appendChild(b);c.appendChild(row)})}
 const commonProps=[
   ['motd','HoneyBee Server'],
@@ -270,8 +337,8 @@ if(el('propsSave')){
 if(el('propsSaveRestart')){
   el('propsSaveRestart').onclick=async()=>{const inputs=[...el('propsForm').querySelectorAll('input[data-key]')];const props={};inputs.forEach(i=>props[i.dataset.key]=i.value);await apiFetch('/api/settings/server-properties',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({properties:props})});await apiFetch('/api/restart',{method:'POST'})}
 }
-async function loadConfig(){const r=await apiFetch('/api/settings/config');const j=await r.json();el('cfgInstanceRoot').value=j.instanceRoot||'';el('cfgJavaPath').value=j.javaPath||'';el('cfgServerJar').value=j.serverJar||'';el('cfgJvmArgs').value=(j.jvmArgs||[]).join(' ');el('cfgAutoRestart').checked=!!j.autoRestart;el('cfgMaxBackoff').value=j.autoRestartMaxBackoffSeconds||300;const te=el('cfgTerminalElevate');if(te)te.checked=!!j.terminalElevate;const af=el('cfgAikarFlags');if(af)af.checked=!!j.aikarFlags;const v=el('cfgVersion');if(v)v.value=j.version||''}
-el('cfgSave').onclick=async()=>{const body={instanceRoot:el('cfgInstanceRoot').value,javaPath:el('cfgJavaPath').value,serverJar:el('cfgServerJar').value,jvmArgs:(el('cfgJvmArgs').value||'').split(/\s+/).filter(Boolean),autoRestart:el('cfgAutoRestart').checked,autoRestartMaxBackoffSeconds:parseInt(el('cfgMaxBackoff').value||'300',10),terminalElevate:el('cfgTerminalElevate').checked,aikarFlags:el('cfgAikarFlags').checked};await apiFetch('/api/settings/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}
+async function loadConfig(){const r=await apiFetch(urlInst('/api/settings/config'));const j=await r.json();el('cfgInstanceRoot').value=j.instanceRoot||'';el('cfgJavaPath').value=j.javaPath||'';el('cfgServerJar').value=j.serverJar||'';el('cfgJvmArgs').value=(j.jvmArgs||[]).join(' ');el('cfgAutoRestart').checked=!!j.autoRestart;el('cfgMaxBackoff').value=j.autoRestartMaxBackoffSeconds||300;const v=el('cfgVersion');if(v)v.value=j.version||''}
+el('cfgSave').onclick=async()=>{const body={instanceRoot:el('cfgInstanceRoot').value,javaPath:el('cfgJavaPath').value,serverJar:el('cfgServerJar').value,jvmArgs:(el('cfgJvmArgs').value||'').split(/\s+/).filter(Boolean),autoRestart:el('cfgAutoRestart').checked,autoRestartMaxBackoffSeconds:parseInt(el('cfgMaxBackoff').value||'300',10)};await apiFetch(urlInst('/api/settings/config'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}
 document.addEventListener('DOMContentLoaded',loadConfig)
 function formatBytes(n){if(n==null)return'';const u=['B','KB','MB','GB','TB'];let i=0;let v=n;while(v>1024&&i<u.length-1){v/=1024;i++}return v.toFixed(1)+' '+u[i]}
 
@@ -283,8 +350,7 @@ const charts={}
 function initCharts(){charts.cpu=new LineChart(el('cpuChart'),{color:'#4bd66a',maxY:100,grid:true});charts.ram=new LineChart(el('ramChart'),{color:'#4bd66a',maxY:100,grid:true});charts.disk=new LineChart(el('diskChart'),{color:'#4bd66a',grid:true});charts.tps=new LineChart(el('tpsChart'),{color:'#4bd66a',maxY:20,grid:true});window.addEventListener('resize',()=>{drawCharts()})}
 function drawCharts(){charts.cpu.draw(chartData.cpu);charts.ram.draw(chartData.ram);charts.disk.draw(chartData.disk);charts.tps.draw(chartData.tps)}
 document.addEventListener('DOMContentLoaded',initCharts)
-function updateMetrics(m){const cpuVal=(m.cpu||0);const ramBytes=(m.memory||0);const diskBytes=(m.diskUsedBytes||0);const tpsVal=m.tps==null?null:m.tps;const ramPct=m.systemMemoryTotal?Math.min(100,ramBytes/m.systemMemoryTotal*100):0;const setTxt=(id,txt)=>{const e=el(id);if(e)e.textContent=txt};setTxt('cpu',cpuVal.toFixed(1));setTxt('ram',formatBytes(ramBytes));setTxt('disk',formatBytes(diskBytes));setTxt('tps',tpsVal==null?'N/A':tpsVal);setTxt('players',(m.players&&m.players.count)||0);setTxt('cpuCur',cpuVal.toFixed(1)+'%');setTxt('ramCur',ramPct.toFixed(1)+'%');setTxt('diskCur',formatBytes(diskBytes));setTxt('tpsCur',tpsVal==null?'N/A':String(tpsVal));pushData('cpu',cpuVal);pushData('ram',ramPct);pushData('disk',diskBytes);pushData('tps',tpsVal==null?0:tpsVal);drawCharts()}
-const selectedFiles=new Set()
+function updateMetrics(m){const cpuVal=(m.cpu||0);const ramBytes=(m.memory||0);const diskBytes=(m.diskUsedBytes||0);const diskTotalBytes=(m.diskTotalBytes||0);const tpsVal=m.tps==null?null:m.tps;const cpuCores=(m.cpuCores||1);const allocatedRamMB=(m.allocatedRamMB||null);const hasAlloc=Number.isFinite(allocatedRamMB)&&allocatedRamMB>0;const allocatedRamBytes=hasAlloc?allocatedRamMB*1024*1024:0;const ramTotal=(m.systemMemoryTotal||0);const cpuPct=Math.min(100,cpuVal);const ramPct=ramTotal?Math.min(100,ramBytes/ramTotal*100):0;const ramAllocPct=allocatedRamBytes?Math.min(100,(ramBytes/allocatedRamBytes)*100):0;const ramCurrentGB=(ramBytes/1024/1024/1024).toFixed(2);const denomGB=hasAlloc?(allocatedRamMB/1024).toFixed(2):(ramTotal/1024/1024/1024).toFixed(2);const setTxt=(id,txt)=>{const e=el(id);if(e)e.textContent=txt};setTxt('cpu',cpuVal.toFixed(1));setTxt('ram',formatBytes(ramBytes));setTxt('disk',formatBytes(diskBytes));setTxt('tps',tpsVal==null?'N/A':tpsVal);setTxt('players',(m.players&&m.players.count)||0);setTxt('cpuCur',cpuVal.toFixed(1)+'%');setTxt('ramCur',ramPct.toFixed(1)+'%');setTxt('diskCur',formatBytes(diskBytes));setTxt('tpsCur',tpsVal==null?'N/A':String(tpsVal));setTxt('consoleCpu',cpuPct.toFixed(1)+'% / 100%');setTxt('consoleRam',ramCurrentGB+' GB / '+denomGB+' GB');setTxt('consoleDisk',formatBytes(diskBytes)+(diskTotalBytes?' / '+formatBytes(diskTotalBytes):''));pushData('cpu',cpuVal);pushData('ram',allocatedRamBytes?ramAllocPct:ramPct);pushData('disk',diskBytes);pushData('tps',tpsVal==null?0:tpsVal);drawCharts()}
 el('deleteSelected').onclick=async()=>{if(selectedFiles.size===0)return;const ok=await showConfirm(`Delete ${selectedFiles.size} item(s)?`);if(!ok)return;let affect=false;const failed=[];const total=selectedFiles.size;for(const target of selectedFiles){if(target.startsWith('plugins/'))affect=true;try{const r=await apiFetch('/api/fs/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:target,inst:activeInstance})});if(!r.ok)failed.push(target)}catch(e){failed.push(target)}}selectedFiles.clear();const p=el('pathInput').value;if(failed.length>0){showToast(`Failed to delete ${failed.length}/${total} item(s)`,'danger',8000)}else{showToast(`Deleted ${total} item(s)`,'success',5000)}setTimeout(()=>{loadFiles(p)},300);if(affect||p==='plugins'||p.startsWith('plugins/'))loadPlugins()}
 el('downloadSelected').onclick=async()=>{if(selectedFiles.size===0)return;try{const paths=Array.from(selectedFiles);const r=await fetch('/api/fs/download-zip-multi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paths})});if(!r.ok){alert('Download failed');return}const blob=await r.blob();const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='selected.zip';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(url);a.remove()},100)}catch(e){alert('Download failed')}}
 if(el('termRun')){

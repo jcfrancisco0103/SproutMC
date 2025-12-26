@@ -56,7 +56,43 @@ let wsClients = new Set()
 let backoffSeconds = 1
 let lastLogKey = null
 let currentLogStream = null
-let metricsCache = { cpu: null, memory: null, diskUsedBytes: null, tps: null, players: { count: 0, list: [] }, systemMemoryTotal: null, systemMemoryFree: null }
+let metricsCache = { cpu: null, memory: null, diskUsedBytes: null, diskTotalBytes: null, tps: null, players: { count: 0, list: [] }, systemMemoryTotal: null, systemMemoryFree: null, cpuCores: os.cpus().length, allocatedRamMB: null }
+
+// Initialize allocated RAM once at startup (will be refreshed each metrics tick)
+metricsCache.allocatedRamMB = resolveAllocatedRamMB()
+
+function parseXmxMb(str) {
+  try {
+    if (!str) return null
+    const m = String(str).match(/-Xmx\s*(\d+)\s*([MmGg])?/i)
+    if (!m) return null
+    let mb = parseInt(m[1])
+    const unit = (m[2] || 'M').toUpperCase()
+    if (unit === 'G') mb *= 1024
+    return isFinite(mb) ? mb : null
+  } catch { return null }
+}
+
+function resolveAllocatedRamMB(instName) {
+  const target = instName || activeInstanceName()
+  // 1) from per-instance config (authoritative)
+  try {
+    const c = loadInstanceConfig(target)
+    const jvmArgs = c.jvmArgs || []
+    const argsStr = Array.isArray(jvmArgs) ? jvmArgs.join(' ') : String(jvmArgs)
+    const mb = parseXmxMb(argsStr)
+    if (mb) return mb
+  } catch {}
+  // 2) from running process args (fallback)
+  try {
+    if (mcProcess && Array.isArray(mcProcess.spawnargs)) {
+      const joined = mcProcess.spawnargs.join(' ')
+      const mb = parseXmxMb(joined)
+      if (mb) return mb
+    }
+  } catch {}
+  return null
+}
 let diskSizeLastTs = 0
 let diskSizeComputing = false
 const playersOnline = new Set()
@@ -115,6 +151,28 @@ function appendConsole(line) {
     m = line.match(/\]:\s(.+?)\sleft the server/i)
     if (m) playersOnline.delete(m[1])
     metricsCache.players = { count: playersOnline.size, list: Array.from(playersOnline) }
+    
+    // Parse TPS from various server outputs
+    // Paper/Purpur format: "TPS from last 1m, 5m, 15m: 20.0, 20.0, 20.0"
+    m = line.match(/TPS from last.*?:\s*([0-9.]+)/i)
+    if (m) metricsCache.tps = parseFloat(m[1])
+    
+    // Spigot /tps command format: "TPS: *20.0 *20.0 *20.0"
+    m = line.match(/TPS:\s*\*?([0-9.]+)/i)
+    if (m) metricsCache.tps = parseFloat(m[1])
+    
+    // Spark format: "TPS: 20.0 (100.0%)"
+    m = line.match(/TPS:\s*([0-9.]+)\s*\(/i)
+    if (m) metricsCache.tps = parseFloat(m[1])
+    
+    // LagMonitor format: "Current TPS = 20.0"
+    m = line.match(/Current TPS\s*=\s*([0-9.]+)/i)
+    if (m) metricsCache.tps = parseFloat(m[1])
+    
+    // Generic TPS pattern: "tps: 20.0" or "TPS 20.0"
+    m = line.match(/\btps\s*[:=]?\s*([0-9.]+)/i)
+    if (m) metricsCache.tps = parseFloat(m[1])
+    
     // sync to per-instance players map for the active instance
     try {
       const name = activeInstanceName()
@@ -141,6 +199,72 @@ function rootForInstance(name){
   } catch {}
   return path.resolve(cfg.instanceRoot)
 }
+
+function instanceConfigPath(name){ return path.join(instancesDir, sanitizeName(name||''), 'instance.json') }
+
+function loadInstanceConfig(name){
+  try {
+    const inst = sanitizeName(name||'')
+    if (!inst) {
+      return {
+        instanceRoot: cfg.instanceRoot,
+        javaPath: cfg.javaPath,
+        serverJar: cfg.serverJar,
+        jvmArgs: cfg.jvmArgs,
+        autoRestart: cfg.autoRestart,
+        autoRestartMaxBackoffSeconds: cfg.autoRestartMaxBackoffSeconds,
+        aikarFlags: cfg.aikarFlags,
+        terminalElevate: cfg.terminalElevate
+      }
+    }
+    const baseRoot = path.join(instancesDir, inst)
+    const base = {
+      instanceRoot: baseRoot,
+      javaPath: cfg.javaPath,
+      serverJar: path.join(baseRoot, 'server.jar'),
+      jvmArgs: cfg.jvmArgs,
+      autoRestart: cfg.autoRestart,
+      autoRestartMaxBackoffSeconds: cfg.autoRestartMaxBackoffSeconds,
+      aikarFlags: cfg.aikarFlags,
+      terminalElevate: cfg.terminalElevate
+    }
+    const p = instanceConfigPath(inst)
+    if (fs.existsSync(p)) {
+      try {
+        const c = JSON.parse(fs.readFileSync(p, 'utf8'))
+        return { ...base, ...c }
+      } catch {}
+    }
+    return base
+  } catch {
+    return {
+      instanceRoot: cfg.instanceRoot,
+      javaPath: cfg.javaPath,
+      serverJar: cfg.serverJar,
+      jvmArgs: cfg.jvmArgs,
+      autoRestart: cfg.autoRestart,
+      autoRestartMaxBackoffSeconds: cfg.autoRestartMaxBackoffSeconds,
+      aikarFlags: cfg.aikarFlags,
+      terminalElevate: cfg.terminalElevate
+    }
+  }
+}
+
+function saveInstanceConfig(name, conf){
+  const inst = sanitizeName(name||'')
+  if (!inst) return null
+  const merged = { ...loadInstanceConfig(inst), ...(conf||{}) }
+  const allowed = ['instanceRoot','javaPath','serverJar','jvmArgs','autoRestart','autoRestartMaxBackoffSeconds','aikarFlags','terminalElevate']
+  const out = {}
+  for (const k of allowed) {
+    if (merged[k] !== undefined) out[k] = merged[k]
+  }
+  const p = instanceConfigPath(inst)
+  fse.ensureDirSync(path.dirname(p))
+  fs.writeFileSync(p, JSON.stringify(out, null, 2))
+  return out
+}
+
 function safeResolve(p, inst) {
   const base = rootForInstance(inst)
   const abs = path.resolve(base, p || '.')
@@ -252,23 +376,33 @@ function sendCommand(cmd) {
 }
 
 async function updateMetrics() {
+  let name = activeInstanceName()||null
   try {
-    const name = activeInstanceName()||null
+    const root = rootForInstance(name)
     const p = name? procMap.get(name) : null
     if (p) {
       const pu = await pidusage(p.pid)
       metricsCache.cpu = pu.cpu
       metricsCache.memory = pu.memory
+      
+      // Auto-query TPS from server if it's online
+      const st = statusMap.get(name) || status
+      if (st.online && mcProcess) {
+        try {
+          sendCommand('tps')
+        } catch {}
+      }
     } else {
       metricsCache.cpu = 0
       metricsCache.memory = 0
+      metricsCache.tps = null
     }
     const now = Date.now()
     if (!diskSizeComputing && (now - diskSizeLastTs > 60_000 || metricsCache.diskUsedBytes == null)) {
       diskSizeComputing = true
       setImmediate(async () => {
         try {
-          const size = await computeFolderSize(path.resolve(cfg.instanceRoot))
+          const size = await computeFolderSize(root)
           metricsCache.diskUsedBytes = size
           diskSizeLastTs = Date.now()
         } catch {}
@@ -277,8 +411,21 @@ async function updateMetrics() {
     }
     metricsCache.systemMemoryTotal = os.totalmem()
     metricsCache.systemMemoryFree = os.freemem()
+    metricsCache.cpuCores = os.cpus().length
+    metricsCache.allocatedRamMB = resolveAllocatedRamMB(name)
+    
+    // Get disk total space
+    try {
+      const { exec } = require('child_process')
+      const instancePath = root
+      exec(`df -B1 "${instancePath}" | tail -1 | awk '{print $2}'`, (err, stdout) => {
+        if (!err && stdout) {
+          metricsCache.diskTotalBytes = parseInt(stdout.trim()) || null
+        }
+      })
+    } catch {}
   } catch {}
-  broadcast('metrics', { instance: activeInstanceName()||'root', metrics: metricsCache })
+  broadcast('metrics', { instance: name||'root', metrics: metricsCache })
 }
 
 setInterval(updateMetrics, 10000)
@@ -410,6 +557,38 @@ app.post('/api/restart', requireAuth, (req, res) => {
 })
 
 // Accounts API
+// System specifications endpoint (returns actual server specs, not client browser specs)
+app.get('/api/system/specs', requireAuth, (req, res) => {
+  try {
+    const cpus = os.cpus()
+    const cpuCores = cpus.length
+    const totalMemoryBytes = os.totalmem()
+    const totalMemoryMB = Math.round(totalMemoryBytes / 1024 / 1024)
+    const totalMemoryGB = (totalMemoryBytes / 1024 / 1024 / 1024).toFixed(2)
+    const freeMemoryBytes = os.freemem()
+    const freeMemoryMB = Math.round(freeMemoryBytes / 1024 / 1024)
+    const platform = os.platform()
+    const arch = os.arch()
+    const hostname = os.hostname()
+    
+    res.json({
+      ok: true,
+      cpuCores,
+      totalMemoryBytes,
+      totalMemoryMB,
+      totalMemoryGB,
+      freeMemoryMB,
+      platform,
+      arch,
+      hostname,
+      cpuModel: cpus[0]?.model || 'Unknown'
+    })
+  } catch (e) {
+    console.error('Failed to get system specs:', e)
+    res.status(500).json({ error: 'system_specs_failed' })
+  }
+})
+
 app.get('/api/accounts', requireAuth, (req, res) => {
   try {
     const conf = JSON.parse(fs.readFileSync(path.resolve('config.json'), 'utf8'))
@@ -958,7 +1137,8 @@ app.post('/api/settings/server-properties', requireAuth, (req, res) => {
 
 app.get('/api/settings/config', requireAuth, (req, res) => {
   try {
-    const c = JSON.parse(fs.readFileSync(path.resolve('config.json'), 'utf8'))
+    const inst = req.query.inst || req.query.name || activeInstanceName()
+    const c = inst ? loadInstanceConfig(inst) : JSON.parse(fs.readFileSync(path.resolve('config.json'), 'utf8'))
     const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'))
     const out = {
       instanceRoot: c.instanceRoot,
@@ -967,6 +1147,7 @@ app.get('/api/settings/config', requireAuth, (req, res) => {
       jvmArgs: c.jvmArgs,
       autoRestart: c.autoRestart,
       autoRestartMaxBackoffSeconds: c.autoRestartMaxBackoffSeconds,
+      aikarFlags: !!c.aikarFlags,
       terminalElevate: !!c.terminalElevate,
       version: pkg.version
     }
@@ -976,13 +1157,19 @@ app.get('/api/settings/config', requireAuth, (req, res) => {
 
 app.post('/api/settings/config', requireAuth, (req, res) => {
   try {
+    const inst = req.query.inst || req.query.name || activeInstanceName()
+    const allowed = ['instanceRoot','javaPath','serverJar','jvmArgs','autoRestart','autoRestartMaxBackoffSeconds','terminalElevate','aikarFlags']
+    if (inst) {
+      const saved = saveInstanceConfig(inst, req.body)
+      audit(req.user.username, 'edit_config', { instance: inst })
+      return res.json({ ok: true, saved })
+    }
     const c = JSON.parse(fs.readFileSync(path.resolve('config.json'), 'utf8'))
-    const allowed = ['instanceRoot','javaPath','serverJar','jvmArgs','autoRestart','autoRestartMaxBackoffSeconds','terminalElevate']
     for (const k of allowed) {
       if (req.body[k] !== undefined) c[k] = req.body[k]
     }
     fs.writeFileSync(path.resolve('config.json'), JSON.stringify(c, null, 2))
-    audit(req.user.username, 'edit_config', {})
+    audit(req.user.username, 'edit_config', { instance: null })
     res.json({ ok: true })
   } catch { res.status(500).json({ error: 'write_failed' }) }
 })
@@ -1124,11 +1311,19 @@ app.post('/api/players/whitelist/remove', requireAuth, (req, res) => { sendComma
 app.post('/api/players/op', requireAuth, (req, res) => { sendCommand(`op ${req.body.player}`); audit(req.user.username, 'op', req.body); res.json({ ok: true }) })
 app.post('/api/players/deop', requireAuth, (req, res) => { sendCommand(`deop ${req.body.player}`); audit(req.user.username, 'deop', req.body); res.json({ ok: true }) })
 
-app.post('/api/world/save', requireAuth, (req, res) => { sendCommand('save-all'); audit(req.user.username, 'save_all', {}); res.json({ ok: true }) })
+app.post('/api/world/save', requireAuth, (req, res) => {
+  try {
+    const inst = req.body.inst || req.query.inst || req.query.name
+    if (inst) sendCommandInstance(inst, 'save-all'); else sendCommand('save-all')
+    audit(req.user.username, 'save_all', { instance: inst||null })
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: 'save_failed' }) }
+})
 
 app.get('/api/worlds', requireAuth, (req, res) => {
   try {
-    const root = safeResolve('.')
+    const inst = req.query.inst || req.query.name
+    const root = safeResolve('.', inst)
     const list = fs.readdirSync(root, { withFileTypes: true }).filter(e => e.isDirectory() && (/^world/.test(e.name))).map(e => e.name)
     res.json({ worlds: list })
   } catch { res.status(400).json({ error: 'bad_path' }) }
@@ -1170,7 +1365,8 @@ app.post('/api/terminal/exec', requireAuth, (req, res) => {
 app.post('/api/worlds/download', requireAuth, (req, res) => {
   try {
     const w = req.body.world
-    const p = safeResolve(w)
+    const inst = req.body.inst || req.query.inst || req.query.name
+    const p = safeResolve(w, inst)
     const out = path.join(backupsDir, `${w}-${Date.now()}.zip`)
     const output = fs.createWriteStream(out)
     const archive = archiver('zip', { zlib: { level: 9 } })
@@ -1184,9 +1380,10 @@ app.post('/api/worlds/download', requireAuth, (req, res) => {
 app.post('/api/worlds/reset', requireAuth, (req, res) => {
   try {
     const w = req.body.world
-    const p = safeResolve(w)
+    const inst = req.body.inst || req.query.inst || req.query.name
+    const p = safeResolve(w, inst)
     fse.removeSync(p)
-    audit(req.user.username, 'world_reset', { world: w })
+    audit(req.user.username, 'world_reset', { world: w, instance: inst||null })
     res.json({ ok: true })
   } catch { res.status(400).json({ error: 'bad_path' }) }
 })
@@ -1438,6 +1635,8 @@ app.post('/api/instances/create', requireAuth, (req,res)=>{
     fse.ensureDirSync(dir)
     fse.ensureDirSync(path.join(dir,'plugins'))
     fs.writeFileSync(path.join(dir,'server.properties'),'motd=New HoneyBee Server'+os.EOL)
+    // create a default per-instance config to keep worlds and RAM separate
+    saveInstanceConfig(name, { instanceRoot: dir, serverJar: path.join(dir,'server.jar') })
     audit(req.user.username,'instance_create',{ name })
     res.json({ ok:true })
   } catch { res.status(500).json({ error:'create_failed' }) }
@@ -1448,12 +1647,12 @@ app.post('/api/instances/select', requireAuth, (req,res)=>{
     const name=sanitizeName(req.body.name)
     const dir=path.join(instancesDir,name)
     if(!fs.existsSync(dir)) return res.status(404).json({ error:'not_found' })
-    const c=JSON.parse(fs.readFileSync(path.resolve('config.json'),'utf8'))
-    c.instanceRoot=dir
-    c.serverJar=path.join(dir,'server.jar')
-    fs.writeFileSync(path.resolve('config.json'), JSON.stringify(c, null, 2))
+    const baseCfg=JSON.parse(fs.readFileSync(path.resolve('config.json'),'utf8'))
+    baseCfg.instanceRoot=dir
+    baseCfg.serverJar=path.join(dir,'server.jar')
+    fs.writeFileSync(path.resolve('config.json'), JSON.stringify(baseCfg, null, 2))
     cfg.instanceRoot=dir
-    cfg.serverJar=c.serverJar
+    cfg.serverJar=baseCfg.serverJar
     fse.ensureDirSync(path.resolve(cfg.instanceRoot))
     appendConsole(`[WRAPPER] Switched active server to '${name}'`)
     audit(req.user.username,'instance_select',{ name })
@@ -1530,19 +1729,22 @@ function appendConsoleFor(name, line){
 function startInstance(name){
   if (!name) return
   if (procMap.get(name)) return
-  const dir = path.join(instancesDir, name)
-  const jar = path.join(dir, 'server.jar')
+  const inst = sanitizeName(name)
+  const conf = loadInstanceConfig(inst)
+  const dir = path.resolve(conf.instanceRoot || path.join(instancesDir, inst))
+  const jar = conf.serverJar ? path.resolve(conf.serverJar) : path.join(dir, 'server.jar')
   try {
+    fse.ensureDirSync(dir)
     const eulaPath = path.join(dir, 'eula.txt')
     if (!fs.existsSync(eulaPath)) fs.writeFileSync(eulaPath, 'eula=true' + os.EOL)
   } catch {}
-  let exec = String(cfg.javaPath||'java').trim()
+  let exec = String(conf.javaPath||cfg.javaPath||'java').trim()
   let extra = []
   if (/\s-/.test(exec)) { const parts = exec.split(/\s+/); exec = parts.shift(); extra = parts }
   function sanitizeJvmArgs(list){const out=[];for(const a of (list||[])){if(typeof a!=='string')continue;const s=a.trim();if(!s.startsWith('-'))continue;const parts=s.split(/(?=-[A-Za-z])/).map(x=>x.trim()).filter(Boolean);for(const p of parts)out.push(p)}return out}
-  const aikar = cfg.aikarFlags ? ['-XX:+UseG1GC','-XX:+ParallelRefProcEnabled','-XX:MaxGCPauseMillis=200','-XX:+UnlockExperimentalVMOptions','-XX:+DisableExplicitGC','-XX:+AlwaysPreTouch','-XX:G1NewSizePercent=30','-XX:G1MaxNewSizePercent=40','-XX:G1HeapRegionSize=8M','-XX:G1ReservePercent=20','-XX:G1HeapWastePercent=5','-XX:G1MixedGCCountTarget=4','-XX:InitiatingHeapOccupancyPercent=15','-XX:SoftRefLRUPolicyMSPerMB=50','-XX:SurvivorRatio=32','-XX:+PerfDisableSharedMem','-XX:MaxTenuringThreshold=1'] : []
+  const aikar = conf.aikarFlags ? ['-XX:+UseG1GC','-XX:+ParallelRefProcEnabled','-XX:MaxGCPauseMillis=200','-XX:+UnlockExperimentalVMOptions','-XX:+DisableExplicitGC','-XX:+AlwaysPreTouch','-XX:G1NewSizePercent=30','-XX:G1MaxNewSizePercent=40','-XX:G1HeapRegionSize=8M','-XX:G1ReservePercent=20','-XX:G1HeapWastePercent=5','-XX:G1MixedGCCountTarget=4','-XX:InitiatingHeapOccupancyPercent=15','-XX:SoftRefLRUPolicyMSPerMB=50','-XX:SurvivorRatio=32','-XX:+PerfDisableSharedMem','-XX:MaxTenuringThreshold=1'] : []
   if (!fs.existsSync(jar)) { appendConsoleFor(name,'[WRAPPER] Server jar not found: '+jar); return }
-  const args = [...extra, ...aikar, ...sanitizeJvmArgs(cfg.jvmArgs||[]), '-jar', jar, 'nogui']
+  const args = [...extra, ...aikar, ...sanitizeJvmArgs(conf.jvmArgs||cfg.jvmArgs||[]), '-jar', jar, 'nogui']
   const p = child_process.spawn(exec, args, { cwd: dir })
   procMap.set(name, p)
   statusMap.set(name, { online: false, crashed: false, starting: true, stopping: false })
