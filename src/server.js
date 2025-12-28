@@ -75,21 +75,22 @@ function parseXmxMb(str) {
 
 function resolveAllocatedRamMB(instName) {
   const target = instName || activeInstanceName()
-  // 1) from per-instance config (authoritative)
+  // 1) from running process args for this instance (most accurate)
+  try {
+    const p = target ? procMap.get(target) : mcProcess
+    if (p && Array.isArray(p.spawnargs)) {
+      const joined = p.spawnargs.join(' ')
+      const mb = parseXmxMb(joined)
+      if (mb) return mb
+    }
+  } catch {}
+  // 2) from per-instance config (fallback)
   try {
     const c = loadInstanceConfig(target)
     const jvmArgs = c.jvmArgs || []
     const argsStr = Array.isArray(jvmArgs) ? jvmArgs.join(' ') : String(jvmArgs)
     const mb = parseXmxMb(argsStr)
     if (mb) return mb
-  } catch {}
-  // 2) from running process args (fallback)
-  try {
-    if (mcProcess && Array.isArray(mcProcess.spawnargs)) {
-      const joined = mcProcess.spawnargs.join(' ')
-      const mb = parseXmxMb(joined)
-      if (mb) return mb
-    }
   } catch {}
   return null
 }
@@ -759,17 +760,20 @@ app.get('/api/fs/read', requireAuth, (req, res) => {
     const st = fs.statSync(p)
     if (st.size > 5 * 1024 * 1024) return res.status(413).json({ error: 'too_large' })
     try {
-      const content = fs.readFileSync(p, 'utf8')
-      res.json({ path: path.relative(rootForInstance(req.query.inst), p), size: st.size, content })
-    } catch (e) {
-      // If file can't be read as UTF-8, try with latin1 fallback
+      const buffer = fs.readFileSync(p)
+      // Try UTF-8 first
       try {
-        const buffer = fs.readFileSync(p)
-        const content = buffer.toString('latin1')
-        res.json({ path: path.relative(rootForInstance(req.query.inst), p), size: st.size, content })
-      } catch (e2) {
-        return res.status(400).json({ error: 'read_failed', details: 'Cannot read file content' })
-      }
+        const content = buffer.toString('utf8')
+        // Validate it's valid UTF-8 by checking for replacement characters
+        if (!content.includes('\ufffd')) {
+          return res.json({ path: path.relative(rootForInstance(req.query.inst), p), size: st.size, content })
+        }
+      } catch (e) {}
+      // Fall back to UTF-8 with permissive handling
+      const content = buffer.toString('utf8')
+      res.json({ path: path.relative(rootForInstance(req.query.inst), p), size: st.size, content })
+    } catch (e) { 
+      return res.status(400).json({ error: 'read_failed', details: 'Cannot read file content' })
     }
   } catch (e) { 
     console.error('File read error:', e)
@@ -940,14 +944,27 @@ app.post('/api/fs/unzip', requireAuth, async (req, res) => {
     fse.ensureDirSync(dest)
     const lower = src.toLowerCase()
     
+    // Extend timeout for large file extraction
+    req.setTimeout(600000) // 10 minutes
+    res.setTimeout(600000)
+    
     const run = (cmd, args) => new Promise((resolve, reject) => {
       try {
         console.log(`Running: ${cmd} ${args.join(' ')} (cwd: ${dest})`)
-        const p = child_process.spawn(cmd, args, { cwd: dest, stdio: 'pipe' })
+        const p = child_process.spawn(cmd, args, { cwd: dest, stdio: 'pipe', maxBuffer: 10 * 1024 * 1024 })
         let stdout = ''
         let stderr = ''
-        p.stdout?.on('data', d => stdout += d.toString())
-        p.stderr?.on('data', d => stderr += d.toString())
+        
+        // Ensure streams are properly drained
+        if (p.stdout) {
+          p.stdout.on('data', d => stdout += d.toString())
+          p.stdout.on('end', () => console.log('stdout ended'))
+        }
+        if (p.stderr) {
+          p.stderr.on('data', d => stderr += d.toString())
+          p.stderr.on('end', () => console.log('stderr ended'))
+        }
+        
         p.on('error', (err) => {
           console.error(`Process error: ${err.message}`)
           reject(err)
@@ -1019,7 +1036,7 @@ app.post('/api/fs/unzip', requireAuth, async (req, res) => {
     }
   } catch (e) { 
     console.error('Unzip endpoint error:', e)
-    res.status(400).json({ error: 'unzip_failed', details: e.message }) 
+    return res.status(400).json({ error: 'unzip_failed', details: e.message }) 
   }
 })
 
@@ -1031,14 +1048,27 @@ app.get('/api/fs/unzip', requireAuth, async (req, res) => {
     fse.ensureDirSync(dest)
     const lower = src.toLowerCase()
     
+    // Extend timeout for large file extraction
+    req.setTimeout(600000) // 10 minutes
+    res.setTimeout(600000)
+    
     const run = (cmd, args) => new Promise((resolve, reject) => {
       try {
         console.log(`Running: ${cmd} ${args.join(' ')} (cwd: ${dest})`)
-        const p = child_process.spawn(cmd, args, { cwd: dest, stdio: 'pipe' })
+        const p = child_process.spawn(cmd, args, { cwd: dest, stdio: 'pipe', maxBuffer: 10 * 1024 * 1024 })
         let stdout = ''
         let stderr = ''
-        p.stdout?.on('data', d => stdout += d.toString())
-        p.stderr?.on('data', d => stderr += d.toString())
+        
+        // Ensure streams are properly drained
+        if (p.stdout) {
+          p.stdout.on('data', d => stdout += d.toString())
+          p.stdout.on('end', () => console.log('stdout ended'))
+        }
+        if (p.stderr) {
+          p.stderr.on('data', d => stderr += d.toString())
+          p.stderr.on('end', () => console.log('stderr ended'))
+        }
+        
         p.on('error', (err) => {
           console.error(`Process error: ${err.message}`)
           reject(err)
@@ -1110,7 +1140,7 @@ app.get('/api/fs/unzip', requireAuth, async (req, res) => {
     }
   } catch (e) { 
     console.error('Unzip endpoint error:', e)
-    res.status(400).json({ error: 'unzip_failed', details: e.message }) 
+    return res.status(400).json({ error: 'unzip_failed', details: e.message }) 
   }
 })
 
