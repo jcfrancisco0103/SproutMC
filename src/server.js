@@ -1,5 +1,6 @@
 const express = require('express')
 const http = require('http')
+const compression = require('compression')
 const WebSocket = require('ws')
 const fs = require('fs')
 const fse = require('fs-extra')
@@ -14,6 +15,8 @@ const jwt = require('jsonwebtoken')
 const bcrypt = require('bcryptjs')
 const cron = require('node-cron')
 const https = require('https')
+const cluster = require('cluster')
+const numCPUs = os.cpus().length
 
 const cfg = JSON.parse(fs.readFileSync(path.resolve('config.json'), 'utf8'))
 // Backwards-compatible normalization: ensure auth.users exists
@@ -28,10 +31,28 @@ if (cfg && cfg.auth) {
 const app = express()
 const server = http.createServer(app)
 const wss = new WebSocket.Server({ server })
+
+// === PERFORMANCE OPTIMIZATIONS ===
+// Enable gzip/deflate compression for all responses
+app.use(compression({
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) return false
+    return compression.filter(req, res)
+  },
+  level: 6
+}))
+
+// Optimize JSON/URL parsing
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
-// Serve the SPA normally; the frontend script will redirect to /login.html if unauthenticated.
-app.use(express.static(path.resolve('public'), { maxAge: 0, etag: true }))
+
+// Serve static files with caching headers (production)
+const isProduction = process.env.NODE_ENV === 'production'
+app.use(express.static(path.resolve('public'), {
+  maxAge: isProduction ? '1d' : 0,
+  etag: true,
+  lastModified: true
+}))
 app.get('/app', (_req, res) => res.sendFile(path.resolve('public/index.html')))
 app.get('/', (_req, res) => res.sendFile(path.resolve('public/index.html')))
 
@@ -1570,8 +1591,54 @@ if (OVERVIEW_ENABLED) {
   }
 }
 
+// === GRACEFUL SHUTDOWN & SIGNAL HANDLING ===
+const shutdownSignals = ['SIGTERM', 'SIGINT']
+shutdownSignals.forEach(signal => {
+  process.on(signal, async () => {
+    console.log(`\n${signal} received. Shutting down gracefully...`)
+    
+    // Close HTTP server
+    server.close(() => {
+      console.log('HTTP server closed')
+      
+      // Stop Minecraft process if running
+      if (mcProcess && !mcProcess.killed) {
+        console.log('Stopping Minecraft server...')
+        mcProcess.kill('SIGTERM')
+        setTimeout(() => {
+          if (mcProcess && !mcProcess.killed) {
+            mcProcess.kill('SIGKILL')
+          }
+          process.exit(0)
+        }, 10000) // 10s timeout before force kill
+      } else {
+        process.exit(0)
+      }
+    })
+    
+    // Force exit after 30 seconds
+    setTimeout(() => {
+      console.error('Forced shutdown timeout')
+      process.exit(1)
+    }, 30000)
+  })
+})
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error)
+  process.exit(1)
+})
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason)
+  process.exit(1)
+})
+
 server.listen(PORT, () => {
   console.log(`Wrapper listening on http://localhost:${PORT}`)
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`)
+  console.log(`Memory limit: ${process.env.NODE_OPTIONS || 'default'}`)
 })
 function findItemsAdderZip() {
   try {

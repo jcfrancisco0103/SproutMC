@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  sproutmc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sproutmc
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Persistent data storage
+      - sproutmc_data:/app/data
+      - sproutmc_logs:/app/logs
+      - sproutmc_backups:/app/backups
+      - sproutmc_instances:/app/instances
+      # Config persistence
+      - ./config.json:/app/config.json:ro
+    environment:
+      # Optional: Set NODE_ENV for production optimizations
+      - NODE_ENV=production
+      # Optional: Adjust for your system
+      - NODE_OPTIONS=--max-old-space-size=2048
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # Resource limits (adjust as needed)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  # Optional: Redis cache service for enhanced performance
+  redis:
+    image: redis:7-alpine
+    container_name: sproutmc_redis
+    restart: unless-stopped
+    volumes:
+      - sproutmc_redis:/data
+    # Optional: Uncomment to expose redis
+    # ports:
+    #   - "6379:6379"
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  sproutmc_data:
+  sproutmc_logs:
+  sproutmc_backups:
+  sproutmc_instances:
+  sproutmc_redis:
+
+networks:
+  default:
+    name: sproutmc_network
