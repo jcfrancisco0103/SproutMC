@@ -1,6 +1,18 @@
-# HoneyBee Wrapper
+# SproutMC - Termux Native Edition
 
-A lightweight web UI to manage a Minecraft server: start/stop, live console, files, plugins, backups, scheduled tasks, worlds management, settings, and metrics — all from your browser.
+A lightweight web UI to manage a Minecraft server on Termux Ubuntu: start/stop, live console, files, plugins, backups, scheduled tasks, worlds management, settings, and metrics — all from your browser.
+
+**Running natively on Termux (no containers needed)**
+
+## Quick Start
+
+```bash
+./start-docker.sh
+# or
+npm start
+```
+
+Open: **http://localhost:3000**
 
 ## Features
 - Start, Stop, Kill controls and auto EULA acceptance
@@ -10,14 +22,15 @@ A lightweight web UI to manage a Minecraft server: start/stop, live console, fil
 - Scheduled tasks (restart, backup, command, announce)
 - Worlds management (save-all, reset, download)
 - Settings: instance root, Java path, server jar, JVM args, auto-restart
-- Aikar’s Flags toggle for JVM tuning
+- Aikar's Flags toggle for JVM tuning
 - Metrics with labeled charts: CPU %, RAM % of system, Disk used, TPS
 - Terminal runner for on-host commands
 - Polished, colorful UI with transitions and status pills
 
 ## Requirements
-- Node.js 16+ (18 recommended)
-- Java 17 (OpenJDK)
+- Node.js 18+
+- Java 17+ (OpenJDK)
+
 - Git
 
 ## Quick Start (Linux/macOS/Windows)
