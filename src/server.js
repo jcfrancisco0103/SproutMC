@@ -771,6 +771,73 @@ app.post('/api/fs/download-zip-multi', requireAuth, (req, res) => {
   } catch { res.status(400).json({ error: 'bad_path' }) }
 })
 
+// Compress selected files/folders into a zip saved in the destination folder
+app.post('/api/fs/zip-multi', requireAuth, async (req, res) => {
+  try {
+    const paths = Array.isArray(req.body && req.body.paths) ? req.body.paths : []
+    if (!paths.length) return res.status(400).json({ error: 'no_paths' })
+    const destRel = req.body && req.body.dest ? req.body.dest : '.'
+    const inst = req.body && req.body.inst
+    const destAbs = safeResolve(destRel, inst)
+    fse.ensureDirSync(destAbs)
+
+    // Choose zip name
+    let zipName = (req.body && req.body.name) || 'compressed.zip'
+    // Ensure .zip extension
+    if (!zipName.toLowerCase().endsWith('.zip')) zipName += '.zip'
+
+    // Avoid overwriting existing zip by adding numeric suffix
+    let outPath = path.join(destAbs, zipName)
+    if (fs.existsSync(outPath)) {
+      const base = zipName.replace(/\.zip$/i, '')
+      let i = 1
+      while (fs.existsSync(outPath)) {
+        const candidate = `${base} (${i}).zip`
+        outPath = path.join(destAbs, candidate)
+        i++
+      }
+      zipName = path.basename(outPath)
+    }
+
+    const output = fs.createWriteStream(outPath)
+    const archive = archiver('zip', { zlib: { level: 9 } })
+
+    archive.on('warning', (err) => { try { console.warn('zip warning', err && err.message) } catch {} })
+    archive.on('error', (err) => { try { console.error('zip error', err && err.message); output.destroy(); } catch {} })
+
+    archive.pipe(output)
+
+    for (const rel of paths) {
+      try {
+        const p = safeResolve(rel, inst)
+        const st = fs.statSync(p)
+        const base = path.basename(p)
+        if (st.isDirectory()) archive.directory(p, base)
+        else archive.file(p, { name: base })
+      } catch (e) {
+        console.warn('skip path during zip', rel, e && e.message)
+      }
+    }
+
+    await archive.finalize()
+
+    output.on('close', () => {
+      try {
+        audit(req.user.username, 'zip_multi', { count: paths.length, out: outPath })
+      } catch {}
+      const relOut = path.relative(rootForInstance(inst), outPath)
+      res.json({ ok: true, name: zipName, path: relOut, size: archive.pointer() })
+    })
+    output.on('error', (err) => {
+      console.error('zip stream error', err && err.message)
+      try { res.status(500).json({ error: 'zip_failed', details: err && err.message }) } catch {}
+    })
+  } catch (e) {
+    console.error('zip-multi failed', e && e.message)
+    res.status(400).json({ error: 'zip_failed', details: e && e.message })
+  }
+})
+
 const editableExt = new Set(['.yml','.yaml','.json','.properties','.txt','.cfg','.ini','.md','.config','.confi','.conf'])
 app.get('/api/fs/read', requireAuth, (req, res) => {
   try {
